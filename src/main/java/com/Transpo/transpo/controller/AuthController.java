@@ -8,47 +8,38 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
-@Controller
+import java.util.Map;
+
+@RestController
+@RequestMapping("/auth")
+
 
 public class AuthController {
 
     private final UserRepository userRepo;
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final BCryptPasswordEncoder encoder;
 
-    public AuthController(UserRepository userRepo, BCryptPasswordEncoder passwordEncoder) {
+    public AuthController(UserRepository userRepo, BCryptPasswordEncoder encoder) {
         this.userRepo = userRepo;
-        this.passwordEncoder = passwordEncoder;
+        this.encoder = encoder;
     }
 
-    @GetMapping("/register")
-    public String registerForm(Model model) {
-        model.addAttribute("user", new User());
-        return "register";
-    }
-    @PostMapping("/save")
-    public String saveUser(@ModelAttribute User user, Model model) {
-        // basic check: username unique
-        if (userRepo.findByUsername(user.getUsername()).isPresent()) {
-            model.addAttribute("error", "Username already exists");
-            model.addAttribute("user", user);
-            return "register";
+    @PostMapping("/register")
+    public Map<String,String>register(@RequestBody User incoming){
+        if (incoming.getUsername()== null|| incoming.getPassword()==null) {
+            throw new RuntimeException("username and password required");
         }
-        // Encrypt the password before saving
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        if (userRepo.findByUsername(incoming.getUsername()).isPresent()) {
+           throw new RuntimeException("Username already exists"); 
+        }
+        User user =new User();
+        user.setUsername(incoming.getUsername());
+        user.setPassword(encoder.encode(incoming.getPassword()));
+        user.setRole("USER");
         userRepo.save(user);
-        model.addAttribute("message", "Registration successful! Please login.");
-        return "login";
+        return Map.of("message","regisered");
     }
-
-    @GetMapping("/login")
-    public String loginPage(){
-        return "login";
-    }
-    @GetMapping({"/","/home"})
-    public String homePage(){
-        return "home";
-    }
-    
-    
 }
