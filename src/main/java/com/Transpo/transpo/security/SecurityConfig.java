@@ -39,12 +39,12 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())//Disable if REST + form-based is OK for dev
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/register","/save","/css/**","/js/**").permitAll()
+                .requestMatchers("/auth/**","/login","/register","/css/**","/js/**").permitAll()
+                .requestMatchers("/api/buses/**","/api/routes/**","/api/schedules/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form
-                .loginPage("/login")
-                .defaultSuccessUrl("/home",true)
+                .loginProcessingUrl("/login")
                 .permitAll()
             )
             .logout(logout -> logout.permitAll());
