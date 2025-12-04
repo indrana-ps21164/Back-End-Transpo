@@ -1,46 +1,47 @@
 package com.Transpo.transpo.controller;
 
+import com.Transpo.transpo.dto.ScheduleDTO;
+import com.Transpo.transpo.mapper.ScheduleMapper;
 import com.Transpo.transpo.model.Schedule;
-import com.Transpo.transpo.repository.ScheduleRepository;
+import com.Transpo.transpo.service.ScheduleService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/schedules")
 public class ScheduleController {
 
-    private final ScheduleRepository scheduleRepo;
+    private final ScheduleService service;
 
-    public ScheduleController(ScheduleRepository scheduleRepo) {
-        this.scheduleRepo = scheduleRepo;
-    }
-
-    @GetMapping
-    public List<Schedule> list() {
-        return scheduleRepo.findAll();
+    public ScheduleController(ScheduleService service) {
+        this.service = service;
     }
 
     @PostMapping
-    public Schedule create(@RequestBody Schedule schedule) {
-        if (schedule.getAvailableSeats() == 0 && schedule.getBus() != null) {
-            schedule.setAvailableSeats(schedule.getBus().getTotalSeats());
-            // Handle case where no seats are available
-        }
-        return scheduleRepo.save(schedule);
+    public ResponseEntity<ScheduleDTO> create(@RequestBody Schedule s) {
+        Schedule saved = service.create(s);
+        return ResponseEntity.ok(ScheduleMapper.toDto(saved));
     }
 
-    //search by origin & destination
-    @GetMapping("/Search")
-    public List<Schedule> search(@RequestParam String origin, @RequestParam String destination) {
-        return scheduleRepo.findByRouteOriginAndRouteDestination(origin, destination);
+    @GetMapping
+    public ResponseEntity<List<ScheduleDTO>> list() {
+        List<ScheduleDTO> dtos = service.list().stream().map(ScheduleMapper::toDto).collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
     @GetMapping("/{id}")
-    public Schedule get(@PathVariable Long id){
-        return scheduleRepo.findById(id).orElse(null);
-    }    
+    public ResponseEntity<ScheduleDTO> get(@PathVariable Long id) {
+        Schedule s = service.get(id);
+        if (s == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(ScheduleMapper.toDto(s));
+    }
+
+    @GetMapping("/{id}/seats")
+    public ResponseEntity<?> seats(@PathVariable Long id) {
+        var info = service.getSeatInfo(id);
+        return ResponseEntity.ok(info);
+    }
 }

@@ -1,5 +1,8 @@
 package com.Transpo.transpo.service;
 
+import com.Transpo.transpo.exception.BadRequestException;
+import com.Transpo.transpo.exception.ConflictException;
+import com.Transpo.transpo.exception.NotFoundException;
 import com.Transpo.transpo.model.Reservation;
 import com.Transpo.transpo.model.Schedule;
 import com.Transpo.transpo.repository.ReservationRepository;
@@ -21,27 +24,33 @@ public class ReservationService {
     }
 
     @Transactional
-    public Reservation bookSeat(Long scheduleId, String passengerName, String passengerEmail,int seatNumber){
-        //lock schedule row for safe decrement
+    public Reservation bookSeat(Long scheduleId, String passengerName, String passengerEmail, int seatNumber) {
+        // lock schedule row for update using repository method with @Lock
         Schedule schedule = scheduleRepo.findScheduleById(scheduleId);
-        if (schedule == null) {
-            throw new RuntimeException("Schedule with ID " + scheduleId + " not found.");
-        }
+        if (schedule == null) throw new NotFoundException("Schedule not found: " + scheduleId);
 
-        if(schedule.getAvailableSeats() <= 0) {
-            throw new RuntimeException("No available seats for this schedule.");
-        }
+        if (schedule.getBus() == null)
+            throw new BadRequestException("Schedule does not have a bus assigned");
 
-        //optional: check seat number validity or duplicates
-        List<Reservation> existingReservations = reservationRepo.findByScheduleId(scheduleId);
-        for (Reservation r : existingReservations){
-            if (r.getSeatNumber() == seatNumber){
-                throw new RuntimeException("Seat number " + seatNumber + " is already reserved.");
+        int maxSeat = schedule.getBus().getTotalSeats();
+        if (seatNumber < 1 || seatNumber > maxSeat)
+            throw new BadRequestException("Seat number must be between 1 and " + maxSeat);
+
+        if (schedule.getAvailableSeats() <= 0)
+            throw new ConflictException("No seats available");
+
+        // prevent duplicate seat booking
+        List<Reservation> existing = reservationRepo.findByScheduleId(scheduleId);
+        for (Reservation r : existing) {
+            if (r.getSeatNumber() == seatNumber) {
+                throw new ConflictException("Seat " + seatNumber + " already taken for this schedule");
             }
         }
 
-       schedule.setAvailableSeats(schedule.getAvailableSeats() - 1);
-        
+        // decrease availability
+        schedule.setAvailableSeats(schedule.getAvailableSeats() - 1);
+        // optionally scheduleRepo.save(schedule); but within @Transactional it's fine
+
         Reservation res = new Reservation();
         res.setSchedule(schedule);
         res.setPassengerName(passengerName);
@@ -49,18 +58,21 @@ public class ReservationService {
         res.setSeatNumber(seatNumber);
 
         return reservationRepo.save(res);
-}
+    }
 
     public List<Reservation> getByEmail(String email) {
         return reservationRepo.findByPassengerEmail(email);
     }
+
+    @Transactional
     public void cancelReservation(Long reservationId) {
-        Reservation r = reservationRepo.findById(reservationId).orElseThrow(() ->
-            new RuntimeException("Reservation with ID " + reservationId + " not found.")
+        Reservation r = reservationRepo.findById(reservationId).orElseThrow(
+                () -> new NotFoundException("Reservation not found: " + reservationId)
         );
-        // Optionally: update the schedule's available seats
         Schedule schedule = r.getSchedule();
-        schedule.setAvailableSeats(schedule.getAvailableSeats() + 1);
+        if (schedule != null) {
+            schedule.setAvailableSeats(schedule.getAvailableSeats() + 1);
+        }
         reservationRepo.delete(r);
     }
 }

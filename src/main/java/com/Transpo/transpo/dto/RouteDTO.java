@@ -1,27 +1,11 @@
-package com.Transpo.transpo.model;
+package com.Transpo.transpo.dto;
 
-import jakarta.persistence.*;
-
-@Entity
-@Table(name = "routes")
-public class Route {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+public class RouteDTO {
     private Long id;
-
-    @Column(nullable=false)
     private String origin;
-
-    @Column(nullable=false)
     private String destination;
 
-    public Route() {}
-
-    public Route(String origin, String destination) {
-        this.origin = origin;
-        this.destination = destination;
-    }
+    public RouteDTO() {}
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
