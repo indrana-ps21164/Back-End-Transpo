@@ -1,29 +1,44 @@
 package com.Transpo.transpo.controller;
 
+import com.Transpo.transpo.dto.BusDTO;
+import com.Transpo.transpo.mapper.BusMapper;
 import com.Transpo.transpo.model.Bus;
-import com.Transpo.transpo.repository.BusRepository;
+import com.Transpo.transpo.service.BusService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/buses")
-
 public class BusController {
 
-    private final BusRepository busRepo;
+    private final BusService busService;
+    public BusController(BusService busService) { this.busService = busService; }
 
-    public BusController(BusRepository busRepo) {
-        this.busRepo = busRepo;
+    @PostMapping
+    public ResponseEntity<BusDTO> create(@RequestBody BusDTO dto) {
+        Bus saved = busService.addBus(BusMapper.toEntity(dto));
+        return ResponseEntity.ok(BusMapper.toDto(saved));
     }
 
     @GetMapping
-    public List<Bus> list() {
-        return busRepo.findAll();
+    public ResponseEntity<List<BusDTO>> list() {
+        List<BusDTO> list = busService.getAllBuses().stream().map(BusMapper::toDto).collect(Collectors.toList());
+        return ResponseEntity.ok(list);
     }
 
-    @PostMapping
-    public Bus create(@RequestBody Bus bus) {
-        return busRepo.save(bus);
+    @GetMapping("/{id}")
+    public ResponseEntity<BusDTO> get(@PathVariable Long id) {
+        Bus b = busService.getBusById(id);
+        if (b == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(BusMapper.toDto(b));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(@PathVariable Long id) {
+        busService.deleteBus(id);
+        return ResponseEntity.ok().build();
     }
 }

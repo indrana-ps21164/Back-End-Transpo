@@ -1,16 +1,12 @@
 package com.Transpo.transpo.security;
 
 import com.Transpo.transpo.service.CustomUserDetailService;
-import java.security.Security;
-
-import org.springframework.context.annotation.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-
-
 
 @Configuration
 public class SecurityConfig {
@@ -22,9 +18,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public BCryptPasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+    public BCryptPasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
 
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
@@ -37,10 +31,11 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable())//Disable if REST + form-based is OK for dev
+            .csrf(csrf -> csrf.disable()) // enable in production if using browser forms + CSRF tokens
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**","/login","/register","/css/**","/js/**").permitAll()
-                .requestMatchers("/api/buses/**","/api/routes/**","/api/schedules/**").hasRole("ADMIN")
+                .requestMatchers("/auth/**", "/", "/index.html", "/login", "/register").permitAll()
+                // admin-only endpoints
+                .requestMatchers("/api/admin/**", "/api/buses/**", "/api/routes/**", "/api/schedules/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form
@@ -49,9 +44,7 @@ public class SecurityConfig {
             )
             .logout(logout -> logout.permitAll());
 
-            //register AthenticationProvider
-            http.authenticationProvider(authenticationProvider());
+        http.authenticationProvider(authenticationProvider());
         return http.build();
     }
-
 }
