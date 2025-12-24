@@ -47,7 +47,7 @@ public class AuthController {
     @GetMapping("/whoami")
     public ResponseEntity<?>whoami(@org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.User user) {
         if(user == null){
-            return ResponseEntity.status(401).body(Map.of("authrnticated",false));
+            return ResponseEntity.status(401).body(Map.of("authenticated",false));
         }
         return ResponseEntity.ok(Map.of("authenticated",true,"username",user.getUsername()));
     }
