@@ -4,6 +4,7 @@ import com.Transpo.transpo.exception.NotFoundException;
 import com.Transpo.transpo.model.Bus;
 import com.Transpo.transpo.repository.BusRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -16,14 +17,17 @@ public class BusService {
         this.busRepository = busRepository;
     }
 
+    @Transactional
     public Bus addBus(Bus bus) {
         return busRepository.save(bus);
     }
 
+   
     public List<Bus> getAllBuses() {
         return busRepository.findAll();
     }
 
+    
     public Bus getBusById(Long id) {
         return busRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Bus not found with id: " + id));
@@ -38,7 +42,7 @@ public class BusService {
 
         return busRepository.save(bus);
     }
-
+    @Transactional
     public void deleteBus(Long id) {
         if (!busRepository.existsById(id)) {
             throw new NotFoundException("Bus not found with id: " + id);

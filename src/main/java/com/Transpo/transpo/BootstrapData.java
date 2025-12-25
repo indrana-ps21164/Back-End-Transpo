@@ -23,9 +23,16 @@ public class BootstrapData implements CommandLineRunner {
             User admin = new User();
             admin.setUsername("admin");
             admin.setPassword(encoder.encode("admin123"));
-            admin.setRole("ADMIN");
+            admin.setRole(Role.ADMIN);
             userRepo.save(admin);
             System.out.println("Created admin/admin123");
+        } else {
+            // If admin already exists, update the role
+            User existingAdmin = userRepo.findByUsername("admin").get();
+            existingAdmin.setRole(Role.ADMIN);
+            userRepo.save(existingAdmin);
+            System.out.println("Updated existing admin role to ROLE_ADMIN");
         }
     }
+
 }

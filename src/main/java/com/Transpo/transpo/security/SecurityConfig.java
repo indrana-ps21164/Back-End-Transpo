@@ -1,5 +1,9 @@
 package com.Transpo.transpo.security;
 
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+
+
 import com.Transpo.transpo.service.CustomUserDetailService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,42 +32,47 @@ public class SecurityConfig {
         p.setPasswordEncoder(passwordEncoder());
         return p;
     }
+    @Bean
+    public AuthenticationManager authenticationManager(
+        AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            .csrf(csrf -> csrf.disable()) // enable in production if using browser forms + CSRF tokens
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/buses/**", "/api/routes/**", "/api/schedules/**").permitAll()
-                // admin-only endpoints
-                .requestMatchers(
-                         HttpMethod.POST,
-                                "/api/buses/**",
-                                "/api/routes/**",
-                                "/api/schedules/**"
-                ).hasRole("ADMIN")
-                .requestMatchers(
-                        HttpMethod.PUT,
-                                "/api/buses/**",
-                                "/api/routes/**",
-                                "/api/schedules/**"
-                ).hasRole("ADMIN")
-                .requestMatchers(
-                        HttpMethod.DELETE,
-                                "/api/buses/**",
-                                "/api/routes/**",
-                                "/api/schedules/**"
-                ).hasRole("ADMIN")
-                .anyRequest().authenticated()
-            )
-            .formLogin(form -> form
-                .loginProcessingUrl("/login")
-                .permitAll()
-            )
-            .logout(logout -> logout.permitAll());
+public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    http
+        .csrf(csrf -> csrf.disable())
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/auth/**").permitAll()
+            .requestMatchers(HttpMethod.GET,
+                "/api/buses/**",
+                "/api/routes/**",
+                "/api/schedules/**").permitAll()
 
-        http.authenticationProvider(authenticationProvider());
-        return http.build();
-    }
+            .requestMatchers("/api/driver/**").hasRole("DRIVER")
+            .requestMatchers("/api/conductor/**").hasRole("CONDUCTOR")
+
+            .requestMatchers(HttpMethod.POST,
+                "/api/buses/**",
+                "/api/routes/**",
+                "/api/schedules/**").hasRole("ADMIN")
+
+            .requestMatchers(HttpMethod.PUT,
+                "/api/buses/**",
+                "/api/routes/**",
+                "/api/schedules/**").hasRole("ADMIN")
+
+            .requestMatchers(HttpMethod.DELETE,
+                "/api/buses/**",
+                "/api/routes/**",
+                "/api/schedules/**").hasRole("ADMIN")
+
+            .anyRequest().authenticated()
+        )
+        .logout(logout -> logout.permitAll());
+
+    return http.build();
+}
+
 }
