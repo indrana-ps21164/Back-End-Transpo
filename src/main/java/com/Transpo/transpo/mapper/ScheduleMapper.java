@@ -18,7 +18,7 @@ public class ScheduleMapper {
             d.setOrigin(s.getRoute().getOrigin());
             d.setDestination(s.getRoute().getDestination());
         }
-        d.setDepartureTime(s.getDeparturTime());
+        d.setDepartureTime(s.getDepartureTime());
         d.setFare(s.getFare());
         d.setAvailableSeats(s.getAvailableSeats());
         return d;

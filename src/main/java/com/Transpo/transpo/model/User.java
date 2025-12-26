@@ -1,7 +1,13 @@
 package com.Transpo.transpo.model;
 
+import com.Transpo.transpo.Role;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -22,16 +28,19 @@ public class User {
     private String password;
 
     //store role like "USER" or "ADMIN"
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private String role ="USER";
+    private Role role = Role.PASSENGER;
+
 
     public User() {
     }
-    public User(String username, String password, String role) {
-        this.username = username;
-        this.password = password;
-        this.role = role;
-    }
+    public User(String username, String password, Role role) {
+    this.username = username;
+    this.password = password;
+    this.role = role;
+}
+
 
     // Getters and Setters
     public Long getId() {
@@ -57,12 +66,8 @@ public class User {
         this.password = password;
     }
 
-    public String getRole() {
-        return role;
-    }
+    public Role getRole() { return role; }
+    public void setRole(Role role) { this.role = role; }
 
-    public void setRole(String role) {
-        this.role = role;
-    }
 
 }

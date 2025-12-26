@@ -16,7 +16,7 @@ public class Schedule {
     @ManyToOne(optional = false)
     private Route route;
 
-    private LocalDateTime departurTime;
+    private LocalDateTime departureTime;
 
     private double fare;
 
@@ -26,10 +26,10 @@ public class Schedule {
     public Schedule() {
     }
 
-    public Schedule(Bus bus, Route route, LocalDateTime departurTime, double fare, int availableSeats) {
+    public Schedule(Bus bus, Route route, LocalDateTime departureTime, double fare, int availableSeats) {
         this.bus = bus;
         this.route = route;
-        this.departurTime = departurTime;
+        this.departureTime = departureTime;
         this.fare = fare;
         this.availableSeats = availableSeats;
     }
@@ -50,12 +50,12 @@ public class Schedule {
     public Route getRoute(){ return route; }
     public void setRoute(Route route){ this.route = route; }
 
-    public LocalDateTime getDeparturTime() {
-        return departurTime;
+    public LocalDateTime getDepartureTime() {
+        return departureTime;
     }
 
-    public void setDeparturTime(LocalDateTime departurTime) {
-        this.departurTime = departurTime;
+    public void setDepartureTime(LocalDateTime departureTime) {
+        this.departureTime = departureTime;
     }
 
     public double getFare() {

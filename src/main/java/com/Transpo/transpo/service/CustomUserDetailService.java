@@ -18,20 +18,20 @@ public class CustomUserDetailService implements UserDetailsService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-       User u = userRepo.findByUsername(username)
-       .orElseThrow(()-> new UsernameNotFoundException("User not found: "+username));
-        
-        
-        //Spring authorities need "ROLE_" prefix when using hasRole, but we will use Role_prefix in authority
-        String roleWithPrefix = "ROLE_" + (u.getRole()==null?"USER":u.getRole());
-        return new org.springframework.security.core.userdetails.User(
-                u.getUsername(),
-                u.getPassword(),
-                List.of(new SimpleGrantedAuthority(roleWithPrefix)
-                )
-        );
-    }
+public UserDetails loadUserByUsername(String username)
+        throws UsernameNotFoundException {
+
+    User u = userRepo.findByUsername(username)
+        .orElseThrow(() ->
+            new UsernameNotFoundException("User not found: " + username));
+
+    return new org.springframework.security.core.userdetails.User(
+        u.getUsername(),
+        u.getPassword(),
+        List.of(new SimpleGrantedAuthority("ROLE_" + u.getRole().name()))
+    );
+}
+
 
 
 }
