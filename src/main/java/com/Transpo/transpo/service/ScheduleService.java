@@ -13,10 +13,14 @@ public class ScheduleService {
 
     private final ScheduleRepository scheduleRepo;
     private final ReservationRepository reservationRepo;
+    private final ReservationRuleService ruleService;
 
-    public ScheduleService(ScheduleRepository scheduleRepo, ReservationRepository reservationRepo) {
+    public ScheduleService(ScheduleRepository scheduleRepo, 
+                          ReservationRepository reservationRepo,
+                          ReservationRuleService ruleService) {
         this.scheduleRepo = scheduleRepo;
         this.reservationRepo = reservationRepo;
+        this.ruleService = ruleService;
     }
 
     public Schedule create(Schedule s) {
@@ -39,20 +43,29 @@ public class ScheduleService {
      */
     public SeatInfo getSeatInfo(Long scheduleId) {
         List<Integer> reserved = reservationRepo.findByScheduleId(scheduleId)
-                .stream().map(r -> r.getSeatNumber()).collect(Collectors.toList());
+                .stream()
+                .map(r -> r.getSeatNumber())
+                .collect(Collectors.toList());
         Schedule s = scheduleRepo.findById(scheduleId).orElse(null);
         int available = s == null ? 0 : s.getAvailableSeats();
-        return new SeatInfo(reserved, available);
+        int totalSeats = s == null || s.getBus() == null ? 0 : s.getBus().getTotalSeats();
+        
+        return new SeatInfo(reserved, available, totalSeats);
     }
 
     public static class SeatInfo {
         private final List<Integer> reservedSeats;
         private final int availableSeats;
-        public SeatInfo(List<Integer> reservedSeats, int availableSeats) {
+        private final int totalSeats;
+        
+        public SeatInfo(List<Integer> reservedSeats, int availableSeats, int totalSeats) {
             this.reservedSeats = reservedSeats;
             this.availableSeats = availableSeats;
+            this.totalSeats = totalSeats;
         }
+        
         public List<Integer> getReservedSeats() { return reservedSeats; }
         public int getAvailableSeats() { return availableSeats; }
+        public int getTotalSeats() { return totalSeats; }
     }
 }
