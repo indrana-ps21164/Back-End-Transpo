@@ -11,17 +11,22 @@ public class Schedule {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(optional = false, fetch = FetchType.EAGER)  // Change to EAGER loading
     private Bus bus;
-    @ManyToOne(optional = false)
+    
+    @ManyToOne(optional = false, fetch = FetchType.EAGER)  // Change to EAGER loading
     private Route route;
 
     private LocalDateTime departureTime;
-
     private double fare;
-
-    //available seats to book (keeps updated)
     private int availableSeats;
+    
+    // Add transient fields for direct ID access
+    @Transient
+    private Long busId;
+    
+    @Transient
+    private Long routeId;
 
     public Schedule() {
     }
@@ -34,44 +39,51 @@ public class Schedule {
         this.availableSeats = availableSeats;
     }
 
-    //getters and setters
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public Long getId() {
-        return id;
+    public Bus getBus() { return bus; }
+    public void setBus(Bus bus) { 
+        this.bus = bus; 
+        if (bus != null) {
+            this.busId = bus.getId();
+        }
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    public Route getRoute() { return route; }
+    public void setRoute(Route route) { 
+        this.route = route; 
+        if (route != null) {
+            this.routeId = route.getId();
+        }
     }
 
-    public Bus getBus(){return bus; }
-    public void setBus(Bus bus){ this.bus = bus; }
+    public LocalDateTime getDepartureTime() { return departureTime; }
+    public void setDepartureTime(LocalDateTime departureTime) { this.departureTime = departureTime; }
 
-    public Route getRoute(){ return route; }
-    public void setRoute(Route route){ this.route = route; }
+    public double getFare() { return fare; }
+    public void setFare(double fare) { this.fare = fare; }
 
-    public LocalDateTime getDepartureTime() {
-        return departureTime;
+    public int getAvailableSeats() { return availableSeats; }
+    public void setAvailableSeats(int availableSeats) { this.availableSeats = availableSeats; }
+
+    // Helper methods for IDs
+    public Long getBusId() {
+        if (bus != null) return bus.getId();
+        return busId;
     }
-
-    public void setDepartureTime(LocalDateTime departureTime) {
-        this.departureTime = departureTime;
+    
+    public void setBusId(Long busId) {
+        this.busId = busId;
     }
-
-    public double getFare() {
-        return fare;
+    
+    public Long getRouteId() {
+        if (route != null) return route.getId();
+        return routeId;
     }
-
-    public void setFare(double fare) {
-        this.fare = fare;
+    
+    public void setRouteId(Long routeId) {
+        this.routeId = routeId;
     }
-
-    public int getAvailableSeats() {
-        return availableSeats;
-    }
-
-    public void setAvailableSeats(int availableSeats) {
-        this.availableSeats = availableSeats;
-    }
-
 }
