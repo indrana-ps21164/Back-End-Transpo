@@ -7,6 +7,9 @@ import com.Transpo.transpo.repository.UserRepository;
 
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -20,11 +23,14 @@ public class AuthController {
 
     private final UserRepository userRepo;
     private final BCryptPasswordEncoder encoder;
+    private final AuthenticationManager authManager;
 
     public AuthController(UserRepository userRepo,
-                          BCryptPasswordEncoder encoder) {
+                          BCryptPasswordEncoder encoder,
+                          AuthenticationManager authManager) {
         this.userRepo = userRepo;
         this.encoder = encoder;
+        this.authManager = authManager;
     }
 
     // ✅ REGISTER (PASSENGER ONLY)
@@ -68,5 +74,23 @@ public class AuthController {
             "username", u.getUsername(),
             "role", u.getRole().name()
         ));
+    }
+
+    // ✅ LOGIN
+   @PostMapping("/login")
+    public Map<String, Object> login(@RequestBody Map<String, String> req) {
+
+        Authentication auth = authManager.authenticate(
+            new UsernamePasswordAuthenticationToken(
+                req.get("username"),
+                req.get("password")
+            )
+        );
+
+        return Map.of(
+            "message", "Login successful",
+            "username", auth.getName(),
+            "roles", auth.getAuthorities()
+        );
     }
 }

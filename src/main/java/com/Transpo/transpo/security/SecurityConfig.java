@@ -2,8 +2,6 @@ package com.Transpo.transpo.security;
 
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
-
-
 import com.Transpo.transpo.service.CustomUserDetailService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,47 +30,51 @@ public class SecurityConfig {
         p.setPasswordEncoder(passwordEncoder());
         return p;
     }
+    
     @Bean
     public AuthenticationManager authenticationManager(
         AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
-
     @Bean
-public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-    http
-        .csrf(csrf -> csrf.disable())
-        .authorizeHttpRequests(auth -> auth
-            .requestMatchers("/auth/**").permitAll()
-            .requestMatchers(HttpMethod.GET,
-                "/api/buses/**",
-                "/api/routes/**",
-                "/api/schedules/**").permitAll()
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET,
+                    "/api/buses/**",
+                    "/api/routes/**",
+                    "/api/schedules/**",
+                    "/api/reservations/by-email").permitAll()
 
-            .requestMatchers("/api/driver/**").hasRole("DRIVER")
-            .requestMatchers("/api/conductor/**").hasRole("CONDUCTOR")
+                // CONDUCTOR can access reservation booking and cancellation
+                .requestMatchers(HttpMethod.POST, "/api/reservations/**").hasAnyRole("PASSENGER", "CONDUCTOR")
+                .requestMatchers(HttpMethod.DELETE, "/api/reservations/**").hasAnyRole("PASSENGER", "CONDUCTOR")
+                
+                .requestMatchers("/api/driver/**").hasRole("DRIVER")
+                .requestMatchers("/api/conductor/**").hasRole("CONDUCTOR")
 
-            .requestMatchers(HttpMethod.POST,
-                "/api/buses/**",
-                "/api/routes/**",
-                "/api/schedules/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST,
+                    "/api/buses/**",
+                    "/api/routes/**",
+                    "/api/schedules/**").hasRole("ADMIN")
 
-            .requestMatchers(HttpMethod.PUT,
-                "/api/buses/**",
-                "/api/routes/**",
-                "/api/schedules/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT,
+                    "/api/buses/**",
+                    "/api/routes/**",
+                    "/api/schedules/**").hasRole("ADMIN")
 
-            .requestMatchers(HttpMethod.DELETE,
-                "/api/buses/**",
-                "/api/routes/**",
-                "/api/schedules/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE,
+                    "/api/buses/**",
+                    "/api/routes/**",
+                    "/api/schedules/**").hasRole("ADMIN")
 
-            .anyRequest().authenticated()
-        )
-        .logout(logout -> logout.permitAll());
+                .anyRequest().authenticated()
+            )
+            .logout(logout -> logout.permitAll());
 
-    return http.build();
-}
-
+        return http.build();
+    }
 }
