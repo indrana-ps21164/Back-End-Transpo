@@ -4,7 +4,6 @@ import com.Transpo.transpo.dto.RegisterRequest;
 import com.Transpo.transpo.Role;
 import com.Transpo.transpo.model.User;
 import com.Transpo.transpo.repository.UserRepository;
-
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -33,10 +32,11 @@ public class AuthController {
         this.authManager = authManager;
     }
 
-    // ✅ REGISTER (PASSENGER ONLY)
+    // ✅ REGISTER (PASSENGER ONLY by default)
     @PostMapping("/register")
     public ResponseEntity<?> register(
-            @Valid @RequestBody RegisterRequest req) {
+            @Valid @RequestBody RegisterRequest req,
+            @RequestParam(required = false) String role) {
 
         if (userRepo.findByUsername(req.getUsername()).isPresent()) {
             return ResponseEntity.badRequest()
@@ -47,13 +47,17 @@ public class AuthController {
         u.setUsername(req.getUsername());
         u.setPassword(encoder.encode(req.getPassword()));
 
-        // 🔐 DEFAULT ROLE
-        u.setRole(Role.PASSENGER);
+        // Set role - default to PASSENGER, only allow PASSENGER or CONDUCTOR for registration
+        if (role != null && (role.equalsIgnoreCase("CONDUCTOR") || role.equalsIgnoreCase("PASSENGER"))) {
+            u.setRole(Role.valueOf(role.toUpperCase()));
+        } else {
+            u.setRole(Role.PASSENGER); // Default role
+        }
 
         userRepo.save(u);
 
         return ResponseEntity.ok(
-            Map.of("message", "Registered successfully"));
+            Map.of("message", "Registered successfully as " + u.getRole()));
     }
 
     // ✅ WHO AM I (USED BY REACT)
