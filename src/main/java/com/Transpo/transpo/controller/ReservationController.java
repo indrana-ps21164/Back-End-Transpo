@@ -4,6 +4,7 @@ import com.Transpo.transpo.dto.ReservationDTO;
 import com.Transpo.transpo.mapper.ReservationMapper;
 import com.Transpo.transpo.model.Reservation;
 import com.Transpo.transpo.service.ReservationService;
+import com.Transpo.transpo.service.ReservationService.SeatInfoWithAllocation;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,6 +27,7 @@ public class ReservationController {
         String name = String.valueOf(req.get("passengerName"));
         String email = String.valueOf(req.get("passengerEmail"));
         int seatNumber = Integer.parseInt(String.valueOf(req.get("seatNumber")));
+        
         Reservation r = reservationService.bookSeat(scheduleId, name, email, seatNumber);
         return ResponseEntity.ok(ReservationMapper.toDto(r));
     }
@@ -33,13 +35,21 @@ public class ReservationController {
     @GetMapping("/by-email")
     public ResponseEntity<List<ReservationDTO>> byEmail(@RequestParam String email){
         List<ReservationDTO> list = reservationService.getByEmail(email)
-                .stream().map(ReservationMapper::toDto).collect(Collectors.toList());
+                .stream()
+                .map(ReservationMapper::toDto)
+                .collect(Collectors.toList());
         return ResponseEntity.ok(list);
     }
 
+    @GetMapping("/{scheduleId}/seat-info")
+    public ResponseEntity<SeatInfoWithAllocation> getSeatInfoWithAllocation(@PathVariable Long scheduleId) {
+        SeatInfoWithAllocation info = reservationService.getSeatInfoWithAllocation(scheduleId);
+        return ResponseEntity.ok(info);
+    }
+
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String,String>> cancel(@PathVariable Long id){
+    public ResponseEntity<Map<String,String>> cancel(@PathVariable Long id) {
         reservationService.cancelReservation(id);
-        return ResponseEntity.ok(Map.of("message","cancelled"));
+        return ResponseEntity.ok(Map.of("message", "Reservation cancelled successfully"));
     }
 }
