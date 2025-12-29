@@ -48,8 +48,12 @@ public class AuthController {
         u.setPassword(encoder.encode(req.getPassword()));
 
         // Set role - default to PASSENGER, only allow PASSENGER or CONDUCTOR for registration
-        if (role != null && (role.equalsIgnoreCase("CONDUCTOR") || role.equalsIgnoreCase("PASSENGER"))) {
-            u.setRole(Role.valueOf(role.toUpperCase()));
+        if (role != null) {
+            try {
+                u.setRole(Role.valueOf(role.toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                u.setRole(Role.PASSENGER); // Default role
+            }
         } else {
             u.setRole(Role.PASSENGER); // Default role
         }

@@ -27,8 +27,12 @@ public class ReservationController {
         String name = String.valueOf(req.get("passengerName"));
         String email = String.valueOf(req.get("passengerEmail"));
         int seatNumber = Integer.parseInt(String.valueOf(req.get("seatNumber")));
-        
-        Reservation r = reservationService.bookSeat(scheduleId, name, email, seatNumber);
+        Long pickupStopId = req.get("pickupStopId") != null ? 
+                Long.valueOf(String.valueOf(req.get("pickupStopId"))) : null;
+        Long dropStopId = req.get("dropStopId") != null ? 
+                Long.valueOf(String.valueOf(req.get("dropStopId"))) : null;
+
+        Reservation r = reservationService.bookSeat(scheduleId, name, email, seatNumber, pickupStopId, dropStopId);
         return ResponseEntity.ok(ReservationMapper.toDto(r));
     }
 

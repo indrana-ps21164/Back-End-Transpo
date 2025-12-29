@@ -11,8 +11,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.Transpo.transpo.model.BusStop;
+import com.Transpo.transpo.repository.BusStopRepository;
+import com.Transpo.transpo.repository.DriverAssignmentRepository;
+import org.springframework.transaction.annotation.Transactional;
+
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class ReservationService {
@@ -20,13 +26,19 @@ public class ReservationService {
     private final ReservationRepository reservationRepo;
     private final ScheduleRepository scheduleRepo;
     private final ReservationRuleService ruleService;
+    private final BusStopRepository busStopRepo;
+    private final DriverAssignmentRepository driverAssignmentRepo;
 
     public ReservationService(ReservationRepository reservationRepo, 
                              ScheduleRepository scheduleRepo,
-                             ReservationRuleService ruleService) {
+                             ReservationRuleService ruleService,
+                             BusStopRepository busStopRepo,
+                             DriverAssignmentRepository driverAssignmentRepo) {
         this.reservationRepo = reservationRepo;
         this.scheduleRepo = scheduleRepo;
         this.ruleService = ruleService;
+        this.busStopRepo = busStopRepo;
+        this.driverAssignmentRepo = driverAssignmentRepo;
     }
 
     /**
@@ -42,7 +54,8 @@ public class ReservationService {
 
     @Transactional
     public Reservation bookSeat(Long scheduleId, String passengerName, 
-                               String passengerEmail, int seatNumber) {
+                               String passengerEmail, int seatNumber
+                               , Long pickupStopId, Long dropStopId) {
         
         // Lock schedule row for update
         Schedule schedule = scheduleRepo.findScheduleById(scheduleId);
@@ -74,6 +87,35 @@ public class ReservationService {
         // Apply business rules based on user role
         ruleService.validateReservationRules(getCurrentUsername(), schedule, true);
 
+         // Validate pickup and drop stops
+        BusStop pickupStop = null;
+        BusStop dropStop = null;
+        
+        if (pickupStopId != null) {
+            pickupStop = busStopRepo.findById(pickupStopId)
+                    .orElseThrow(() -> new NotFoundException("Pickup stop not found: " + pickupStopId));
+            // Verify pickup stop belongs to the route of this schedule
+            if (!pickupStop.getRoute().getId().equals(schedule.getRoute().getId())) {
+                throw new BadRequestException("Pickup stop does not belong to this route");
+            }
+        }
+        
+        if (dropStopId != null) {
+            dropStop = busStopRepo.findById(dropStopId)
+                    .orElseThrow(() -> new NotFoundException("Drop stop not found: " + dropStopId));
+            // Verify drop stop belongs to the route of this schedule
+            if (!dropStop.getRoute().getId().equals(schedule.getRoute().getId())) {
+                throw new BadRequestException("Drop stop does not belong to this route");
+            }
+        }
+        
+        // Verify pickup comes before drop in the route sequence
+        if (pickupStop != null && dropStop != null) {
+            if (pickupStop.getSequence() >= dropStop.getSequence()) {
+                throw new BadRequestException("Pickup stop must come before drop stop in the route");
+            }
+        }
+
         // Decrease availability
         schedule.setAvailableSeats(schedule.getAvailableSeats() - 1);
         scheduleRepo.save(schedule);
@@ -84,6 +126,8 @@ public class ReservationService {
         res.setPassengerName(passengerName);
         res.setPassengerEmail(passengerEmail);
         res.setSeatNumber(seatNumber);
+        res.setPickupStop(pickupStop);
+        res.setDropStop(dropStop);
 
         return reservationRepo.save(res);
     }
@@ -160,5 +204,23 @@ public class ReservationService {
         public int getTotalSeats() { return totalSeats; }
         public int getPassengerAllocatedSeats() { return passengerAllocatedSeats; }
         public int getRemainingPassengerSeats() { return remainingPassengerSeats; }
+    }
+    /**
+     * Get reservations by driver (for their assigned bus)
+     */
+    public List<Reservation> getReservationsForDriver(String username) {
+        // Find driver assignment
+        var assignment = driverAssignmentRepo.findByDriverUsername(username)
+                .orElseThrow(() -> new NotFoundException("Driver assignment not found"));
+        
+        // Get all schedules for driver's bus
+        List<Schedule> schedules = scheduleRepo.findAll().stream()
+                .filter(s -> s.getBus().getId().equals(assignment.getBus().getId()))
+                .collect(Collectors.toList());
+        
+        // Get all reservations for these schedules
+        return schedules.stream()
+                .flatMap(s -> reservationRepo.findByScheduleId(s.getId()).stream())
+                .collect(Collectors.toList());
     }
 }

@@ -50,5 +50,20 @@ public class BootstrapData implements CommandLineRunner {
             userRepo.save(existingConductor);
             System.out.println("Updated existing conductor role to ROLE_CONDUCTOR");
         }
+        // Create driver if not exists
+        if (userRepo.findByUsername("driver").isEmpty()) {
+            User driver = new User();
+            driver.setUsername("driver");
+            driver.setPassword(encoder.encode("driver123"));
+            driver.setRole(Role.DRIVER);
+            userRepo.save(driver);
+            System.out.println("Created driver/driver123");
+        }else {
+            // If driver already exists, update the role
+            User existingDriver = userRepo.findByUsername("driver").get();
+            existingDriver.setRole(Role.DRIVER);
+            userRepo.save(existingDriver);
+            System.out.println("Updated existing driver role to ROLE_DRIVER");
+        }
     }
 }

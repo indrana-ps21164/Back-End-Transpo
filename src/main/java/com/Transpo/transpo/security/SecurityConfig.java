@@ -105,8 +105,11 @@ public class SecurityConfig {
                     "/api/routes/**",
                     "/api/schedules/**").hasRole("ADMIN")
                 
-                // Other role endpoints
+                // Driver endpoints
                 .requestMatchers("/api/driver/**").hasRole("DRIVER")
+
+                // Other role endpoints
+            
                 .requestMatchers("/api/conductor/**").hasRole("CONDUCTOR")
                 
                 // Any other request needs authentication
