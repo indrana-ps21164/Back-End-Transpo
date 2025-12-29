@@ -14,6 +14,8 @@ public class ReservationMapper {
         d.setPassengerEmail(r.getPassengerEmail());
         d.setSeatNumber(r.getSeatNumber());
         d.setBookingTime(r.getBookingTime());
+        d.setPickupStopId(r.getPickupStop() != null ? r.getPickupStop().getId() : null);
+        d.setDropStopId(r.getDropStop() != null ? r.getDropStop().getId() : null);
         return d;
     }
 }
