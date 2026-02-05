@@ -122,8 +122,9 @@ function RegisterPage() {
           <option value="">Role (optional)</option>
           <option value="PASSENGER">Passenger</option>
           <option value="CONDUCTOR">Conductor</option>
+          <option value="DRIVER">Driver</option>
+          <option value="ADMIN">Admin</option>
         </select>
-        {/* Only Passenger or Conductor roles are allowed for registration */}
         <button type="submit" disabled={loading}>{loading ? 'Registering...' : 'Register'}</button>
       </form>
     </div>

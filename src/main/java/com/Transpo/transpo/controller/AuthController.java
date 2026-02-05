@@ -47,7 +47,7 @@ public class AuthController {
         u.setUsername(req.getUsername());
         u.setPassword(encoder.encode(req.getPassword()));
 
-        // Set role - default to PASSENGER, only allow PASSENGER or CONDUCTOR for registration
+        // Set role - default to PASSENGER; accept any valid enum (DRIVER, PASSENGER, CONDUCTOR, ADMIN)
         if (role != null) {
             try {
                 u.setRole(Role.valueOf(role.toUpperCase()));
