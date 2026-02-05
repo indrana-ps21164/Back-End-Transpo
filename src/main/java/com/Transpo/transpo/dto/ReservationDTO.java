@@ -9,6 +9,9 @@ public class ReservationDTO {
     private String passengerEmail;
     private int seatNumber;
     private LocalDateTime bookingTime;
+    private Long pickupStopId;  // New field
+    private Long dropStopId;    // New field
+
 
     public ReservationDTO() {}
 
@@ -31,4 +34,11 @@ public class ReservationDTO {
 
     public LocalDateTime getBookingTime() { return bookingTime; }
     public void setBookingTime(LocalDateTime bookingTime) { this.bookingTime = bookingTime; }
+
+    public Long getPickupStopId() { return pickupStopId; }
+    public void setPickupStopId(Long pickupStopId) { this.pickupStopId = pickupStopId; }
+
+    public Long getDropStopId() { return dropStopId; }
+    public void setDropStopId(Long dropStopId) { this.dropStopId = dropStopId; }
+
 }

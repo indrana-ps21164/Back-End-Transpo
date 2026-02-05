@@ -18,6 +18,14 @@ public class Reservation {
     private String passengerEmail;
     private int seatNumber;
 
+    @ManyToOne
+    @JoinColumn(name = "pickup_stop_id")
+    private BusStop pickupStop;
+
+    @ManyToOne
+    @JoinColumn(name = "drop_stop_id")
+    private BusStop dropStop;
+
     private LocalDateTime bookingTime = LocalDateTime.now();
 
     public Reservation() {
@@ -63,6 +71,12 @@ public class Reservation {
     public void setSeatNumber(int seatNumber) {
         this.seatNumber = seatNumber;
     }
+
+    public BusStop getPickupStop() { return pickupStop; }
+    public void setPickupStop(BusStop pickupStop) { this.pickupStop = pickupStop; }
+    
+    public BusStop getDropStop() { return dropStop; }
+    public void setDropStop(BusStop dropStop) { this.dropStop = dropStop; }
 
     public LocalDateTime getBookingTime() {
         return bookingTime;

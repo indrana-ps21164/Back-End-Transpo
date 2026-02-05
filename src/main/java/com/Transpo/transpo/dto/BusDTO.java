@@ -1,9 +1,16 @@
 package com.Transpo.transpo.dto;
 
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+
 public class BusDTO {
+    
     private Long id;
+    @NotBlank
     private String busNumber;
+    @NotBlank
     private String busName;
+    @Min(1)
     private int totalSeats;
 
     public BusDTO() {}
