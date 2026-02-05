@@ -268,9 +268,12 @@ function SchedulesPage() {
 function ReservationsPage() {
   const [items, setItems] = useState([]);
   const [mine, setMine] = useState([]);
-  const [routeId, setRouteId] = useState('');
   const [scheduleId, setScheduleId] = useState('');
-  const [seats, setSeats] = useState(1);
+  const [passengerName, setPassengerName] = useState('');
+  const [passengerEmail, setPassengerEmail] = useState('');
+  const [seatNumber, setSeatNumber] = useState(1);
+  const [pickupStopId, setPickupStopId] = useState('');
+  const [dropStopId, setDropStopId] = useState('');
   useState(() => { (async () => {
     setItems(await getReservations());
     const me = localStorage.getItem('token');
@@ -280,7 +283,14 @@ function ReservationsPage() {
   })(); }, []);
   const onCreate = async (e) => {
     e.preventDefault();
-    await createReservation({ routeId, scheduleId, seats });
+    await createReservation({
+      scheduleId: Number(scheduleId),
+      passengerName,
+      passengerEmail,
+      seatNumber: Number(seatNumber),
+      pickupStopId: pickupStopId ? Number(pickupStopId) : undefined,
+      dropStopId: dropStopId ? Number(dropStopId) : undefined,
+    });
     setItems(await getReservations());
     const me = localStorage.getItem('token');
     if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
@@ -288,10 +298,13 @@ function ReservationsPage() {
   return (
     <div>
       <h2>Reservations</h2>
-      <form onSubmit={onCreate} className="form">
-        <input placeholder="Route ID" value={routeId} onChange={(e) => setRouteId(e.target.value)} />
+      <form onSubmit={onCreate} className="form" style={{ flexWrap: 'wrap' }}>
         <input placeholder="Schedule ID" value={scheduleId} onChange={(e) => setScheduleId(e.target.value)} />
-        <input placeholder="Seats" type="number" value={seats} onChange={(e) => setSeats(Number(e.target.value))} />
+        <input placeholder="Passenger Name" value={passengerName} onChange={(e) => setPassengerName(e.target.value)} />
+        <input placeholder="Passenger Email" value={passengerEmail} onChange={(e) => setPassengerEmail(e.target.value)} />
+        <input placeholder="Seat Number" type="number" value={seatNumber} onChange={(e) => setSeatNumber(e.target.value)} />
+        <input placeholder="Pickup Stop ID (optional)" value={pickupStopId} onChange={(e) => setPickupStopId(e.target.value)} />
+        <input placeholder="Drop Stop ID (optional)" value={dropStopId} onChange={(e) => setDropStopId(e.target.value)} />
         <button type="submit">Create</button>
       </form>
       <ul>
