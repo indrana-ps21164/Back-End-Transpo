@@ -52,7 +52,7 @@ export default function App() {
 // Lazy simple pages
 import { useState } from 'react';
 import { login, register } from './api/auth';
-import { getBuses, getRoutes, getSchedules, getReservations, createReservation, getMapData } from './api/resources';
+import { getBuses, getRoutes, getSchedules, getReservations, createReservation, getMapData, getReservationsByUser } from './api/resources';
 
 // Generic table to render arrays of objects
 function DataTable({ items }) {
@@ -218,27 +218,72 @@ function RoutesPage() {
 
 function SchedulesPage() {
   const [items, setItems] = useState([]);
-  useState(() => { (async () => setItems(await getSchedules()))(); }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  useState(() => { (async () => {
+    try {
+      const data = await getSchedules();
+      setItems(Array.isArray(data) ? data : (data?.content ?? []));
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to load schedules');
+    } finally {
+      setLoading(false);
+    }
+  })(); }, []);
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p style={{ color: 'red' }}>{error}</p>;
+
+  const groups = items.reduce((acc, s) => {
+    const key = s.routeName || s.route?.name || s.routeId || 'Route';
+    (acc[key] ||= []).push(s);
+    return acc;
+  }, {});
+
   return (
     <div>
       <h2>Schedules</h2>
-      <ul>
-        {items.map((s) => (<li key={s.id}>{s.time || s.departureTime || JSON.stringify(s)}</li>))}
-      </ul>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '1rem' }}>
+        {Object.entries(groups).map(([route, list]) => (
+          <div key={route} style={{ border: '1px solid #ddd', borderRadius: 8, padding: '0.75rem' }}>
+            <h3 style={{ margin: '0 0 .5rem' }}>{route}</h3>
+            {list.map((s) => (
+              <div key={s.id} style={{ borderTop: '1px dashed #eee', padding: '.5rem 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <strong>{s.departureTime || s.time || '—'}</strong>
+                  <span>{s.arrivalTime ? `→ ${s.arrivalTime}` : ''}</span>
+                </div>
+                <div style={{ fontSize: '.9rem', color: '#555' }}>
+                  Bus: {s.busNumber || s.bus?.number || 'N/A'} · Stop: {s.stopName || s.stop?.name || 'N/A'}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function ReservationsPage() {
   const [items, setItems] = useState([]);
+  const [mine, setMine] = useState([]);
   const [routeId, setRouteId] = useState('');
   const [scheduleId, setScheduleId] = useState('');
   const [seats, setSeats] = useState(1);
-  useState(() => { (async () => setItems(await getReservations()))(); }, []);
+  useState(() => { (async () => {
+    setItems(await getReservations());
+    const me = localStorage.getItem('token');
+    if (me) {
+      try { setMine(await getReservationsByUser(me)); } catch {}
+    }
+  })(); }, []);
   const onCreate = async (e) => {
     e.preventDefault();
     await createReservation({ routeId, scheduleId, seats });
     setItems(await getReservations());
+    const me = localStorage.getItem('token');
+    if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
   };
   return (
     <div>
@@ -252,6 +297,12 @@ function ReservationsPage() {
       <ul>
         {items.map((r) => (<li key={r.id}>{r.status || JSON.stringify(r)}</li>))}
       </ul>
+      <h3>My Reservations</h3>
+      {mine && mine.length > 0 ? (
+        <DataTable items={mine} />
+      ) : (
+        <p>No Reservations</p>
+      )}
     </div>
   );
 }
