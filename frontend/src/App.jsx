@@ -54,6 +54,39 @@ import { useState } from 'react';
 import { login, register } from './api/auth';
 import { getBuses, getRoutes, getSchedules, getReservations, createReservation, getMapData } from './api/resources';
 
+// Generic table to render arrays of objects
+function DataTable({ items }) {
+  if (!items || items.length === 0) return <p>No data</p>;
+  const headers = Array.from(items.reduce((set, item) => {
+    Object.keys(item || {}).forEach(k => set.add(k));
+    return set;
+  }, new Set()));
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            {headers.map(h => (
+              <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((row, idx) => (
+            <tr key={row.id ?? idx}>
+              {headers.map(h => (
+                <td key={h} style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>
+                  {typeof row[h] === 'object' ? JSON.stringify(row[h]) : String(row[h])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -139,9 +172,9 @@ function BusesPage() {
     (async () => {
       try {
         const data = await getBuses();
-        setItems(data);
+        setItems(Array.isArray(data) ? data : (data?.content ?? []));
       } catch (err) {
-        setError('Failed to load');
+        setError(err?.response?.data?.message || 'Failed to load buses');
       } finally {
         setLoading(false);
       }
@@ -152,24 +185,33 @@ function BusesPage() {
   return (
     <div>
       <h2>Buses</h2>
-      <ul>
-        {items.map((b) => (
-          <li key={b.id}>{b.number || b.name || JSON.stringify(b)}</li>
-        ))}
-      </ul>
+      <DataTable items={items} />
     </div>
   );
 }
 
 function RoutesPage() {
   const [items, setItems] = useState([]);
-  useState(() => { (async () => setItems(await getRoutes()))(); }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  useState(() => {
+    (async () => {
+      try {
+        const data = await getRoutes();
+        setItems(Array.isArray(data) ? data : (data?.content ?? []));
+      } catch (err) {
+        setError(err?.response?.data?.message || 'Failed to load routes');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p style={{ color: 'red' }}>{error}</p>;
   return (
     <div>
       <h2>Routes</h2>
-      <ul>
-        {items.map((r) => (<li key={r.id}>{r.name || r.routeName || JSON.stringify(r)}</li>))}
-      </ul>
+      <DataTable items={items} />
     </div>
   );
 }
