@@ -88,8 +88,10 @@ public class SecurityConfig {
                 // Reservation endpoints
                 .requestMatchers(HttpMethod.POST, "/api/reservations/**")
                     .hasAnyRole("PASSENGER", "CONDUCTOR", "ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/reservations/**")
+                    .hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/reservations/**")
-                    .hasAnyRole("PASSENGER", "CONDUCTOR", "ADMIN")
+                    .hasRole("ADMIN")
                 
                 // Admin-only endpoints
                 .requestMatchers(HttpMethod.POST,

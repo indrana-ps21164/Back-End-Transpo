@@ -51,6 +51,12 @@ public class ReservationController {
         return ResponseEntity.ok(info);
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<ReservationDTO> update(@PathVariable Long id, @RequestBody ReservationDTO dto) {
+        Reservation updated = reservationService.updateReservation(id, dto);
+        return ResponseEntity.ok(ReservationMapper.toDto(updated));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String,String>> cancel(@PathVariable Long id) {
         reservationService.cancelReservation(id);

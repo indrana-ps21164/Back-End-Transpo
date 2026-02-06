@@ -52,7 +52,26 @@ export default function App() {
 // Lazy simple pages
 import { useState } from 'react';
 import { login, register } from './api/auth';
-import { getBuses, getRoutes, getSchedules, getReservations, createReservation, getMapData, getReservationsByUser } from './api/resources';
+import {
+  getBuses,
+  createBus,
+  updateBus,
+  deleteBus,
+  getRoutes,
+  createRoute,
+  updateRoute,
+  deleteRoute,
+  getSchedules,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
+  getReservations,
+  createReservation,
+  deleteReservation,
+  getMapData,
+  getReservationsByUser,
+} from './api/resources';
+import { whoami } from './api/auth';
 
 // Generic table to render arrays of objects
 function DataTable({ items }) {
@@ -100,7 +119,8 @@ function LoginPage() {
       localStorage.setItem('token', data.username || '');
       window.location.href = '/';
     } catch (err) {
-      setError(err?.response?.data?.message || 'Login failed');
+  const resp = err?.response?.data;
+  setError(resp?.error || resp?.message || 'Login failed');
     }
   };
   return (
@@ -168,11 +188,18 @@ function BusesPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [newBus, setNewBus] = useState({ busNumber: '', totalSeats: 40 });
+
   useState(() => {
     (async () => {
       try {
         const data = await getBuses();
         setItems(Array.isArray(data) ? data : (data?.content ?? []));
+        try {
+          const me = await whoami();
+          setIsAdmin(me?.role === 'ADMIN');
+        } catch {}
       } catch (err) {
         setError(err?.response?.data?.message || 'Failed to load buses');
       } finally {
@@ -180,12 +207,98 @@ function BusesPage() {
       }
     })();
   }, []);
+
+  const refreshBuses = async () => {
+    const data = await getBuses();
+    setItems(Array.isArray(data) ? data : (data?.content ?? []));
+  };
+
+  const handleBusChange = (id, field, value) => {
+    setItems(prev => prev.map(b => (b.id === id ? { ...b, [field]: value } : b)));
+  };
+
   if (loading) return <p>Loading...</p>;
   if (error) return <p style={{ color: 'red' }}>{error}</p>;
+
   return (
     <div>
       <h2>Buses</h2>
       <DataTable items={items} />
+
+      {isAdmin && (
+        <>
+          <div style={{ marginTop: '1rem' }}>
+            <h3>Add Bus</h3>
+            <div className="form" style={{ flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                <label><strong>Bus Name / Number</strong></label>
+                <input
+                  value={newBus.busNumber}
+                  onChange={(e) => setNewBus({ ...newBus, busNumber: e.target.value })}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                <label><strong>Total Seats</strong></label>
+                <input
+                  type="number"
+                  value={newBus.totalSeats}
+                  onChange={(e) => setNewBus({ ...newBus, totalSeats: Number(e.target.value) })}
+                />
+              </div>
+              <button
+                onClick={async () => {
+                  await createBus(newBus);
+                  setNewBus({ busNumber: '', totalSeats: 40 });
+                  await refreshBuses();
+                }}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '1rem' }}>
+            <h3>Admin: Edit/Delete</h3>
+            {items.map((b) => (
+              <div key={b.id} className="form" style={{ flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                  <label><strong>Bus Name / Number</strong></label>
+                  <input
+                    value={b.busName || b.busNumber || b.number || ''}
+                    onChange={(e) => handleBusChange(b.id, 'busNumber', e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                  <label><strong>Total Seats</strong></label>
+                  <input
+                    type="number"
+                    value={b.totalSeats ?? 0}
+                    onChange={(e) => handleBusChange(b.id, 'totalSeats', Number(e.target.value))}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                  <button
+                    onClick={async () => {
+                      await updateBus(b.id, b);
+                      await refreshBuses();
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await deleteBus(b.id);
+                      await refreshBuses();
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -194,11 +307,15 @@ function RoutesPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [newRoute, setNewRoute] = useState({ name: '', origin: '', destination: '' });
+
   useState(() => {
     (async () => {
       try {
         const data = await getRoutes();
         setItems(Array.isArray(data) ? data : (data?.content ?? []));
+        try { const me = await whoami(); setIsAdmin(me?.role === 'ADMIN'); } catch {}
       } catch (err) {
         setError(err?.response?.data?.message || 'Failed to load routes');
       } finally {
@@ -206,12 +323,110 @@ function RoutesPage() {
       }
     })();
   }, []);
+
+  const refreshRoutes = async () => {
+    const data = await getRoutes();
+    setItems(Array.isArray(data) ? data : (data?.content ?? []));
+  };
+
+  const handleRouteChange = (id, field, value) => {
+    setItems(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+  };
+
   if (loading) return <p>Loading...</p>;
   if (error) return <p style={{ color: 'red' }}>{error}</p>;
+
   return (
     <div>
       <h2>Routes</h2>
       <DataTable items={items} />
+
+      {isAdmin && (
+        <>
+          <div style={{ marginTop: '1rem' }}>
+            <h3>Add Route</h3>
+            <div className="form" style={{ flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                <label><strong>Route Name</strong></label>
+                <input
+                  value={newRoute.name}
+                  onChange={(e) => setNewRoute({ ...newRoute, name: e.target.value })}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                <label><strong>Origin</strong></label>
+                <input
+                  value={newRoute.origin}
+                  onChange={(e) => setNewRoute({ ...newRoute, origin: e.target.value })}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                <label><strong>Destination</strong></label>
+                <input
+                  value={newRoute.destination}
+                  onChange={(e) => setNewRoute({ ...newRoute, destination: e.target.value })}
+                />
+              </div>
+              <button
+                onClick={async () => {
+                  await createRoute(newRoute);
+                  setNewRoute({ name: '', origin: '', destination: '' });
+                  await refreshRoutes();
+                }}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '1rem' }}>
+            <h3>Admin: Edit/Delete</h3>
+            {items.map((r) => (
+              <div key={r.id} className="form" style={{ flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                  <label><strong>Route Name</strong></label>
+                  <input
+                    value={r.name || r.routeName || ''}
+                    onChange={(e) => handleRouteChange(r.id, 'name', e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                  <label><strong>Origin</strong></label>
+                  <input
+                    value={r.origin || ''}
+                    onChange={(e) => handleRouteChange(r.id, 'origin', e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                  <label><strong>Destination</strong></label>
+                  <input
+                    value={r.destination || ''}
+                    onChange={(e) => handleRouteChange(r.id, 'destination', e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                  <button
+                    onClick={async () => {
+                      await updateRoute(r.id, r);
+                      await refreshRoutes();
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await deleteRoute(r.id);
+                      await refreshRoutes();
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -220,16 +435,29 @@ function SchedulesPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [newSchedule, setNewSchedule] = useState({ departureTime: '', busId: '', routeId: '' });
+
   useState(() => { (async () => {
     try {
       const data = await getSchedules();
       setItems(Array.isArray(data) ? data : (data?.content ?? []));
+      try { const me = await whoami(); setIsAdmin(me?.role === 'ADMIN'); } catch {}
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to load schedules');
     } finally {
       setLoading(false);
     }
   })(); }, []);
+
+  const refreshSchedules = async () => {
+    const data = await getSchedules();
+    setItems(Array.isArray(data) ? data : (data?.content ?? []));
+  };
+
+  const handleScheduleChange = (id, field, value) => {
+    setItems(prev => prev.map(s => (s.id === id ? { ...s, [field]: value } : s)));
+  };
 
   if (loading) return <p>Loading...</p>;
   if (error) return <p style={{ color: 'red' }}>{error}</p>;
@@ -243,6 +471,45 @@ function SchedulesPage() {
   return (
     <div>
       <h2>Schedules</h2>
+
+      {isAdmin && (
+        <div style={{ marginBottom: '1rem' }}>
+          <h3>Add Schedule</h3>
+          <div className="form" style={{ flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+              <label><strong>Departure Time</strong></label>
+              <input
+                value={newSchedule.departureTime}
+                onChange={(e) => setNewSchedule({ ...newSchedule, departureTime: e.target.value })}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+              <label><strong>Bus ID</strong></label>
+              <input
+                value={newSchedule.busId}
+                onChange={(e) => setNewSchedule({ ...newSchedule, busId: e.target.value })}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+              <label><strong>Route ID</strong></label>
+              <input
+                value={newSchedule.routeId}
+                onChange={(e) => setNewSchedule({ ...newSchedule, routeId: e.target.value })}
+              />
+            </div>
+            <button
+              onClick={async () => {
+                await createSchedule(newSchedule);
+                setNewSchedule({ departureTime: '', busId: '', routeId: '' });
+                await refreshSchedules();
+              }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '1rem' }}>
         {Object.entries(groups).map(([route, list]) => (
           <div key={route} style={{ border: '1px solid #ddd', borderRadius: 8, padding: '0.75rem' }}>
@@ -256,6 +523,42 @@ function SchedulesPage() {
                 <div style={{ fontSize: '.9rem', color: '#555' }}>
                   Bus: {s.busNumber || s.bus?.number || 'N/A'} · Stop: {s.stopName || s.stop?.name || 'N/A'}
                 </div>
+                {isAdmin && (
+                  <div className="form" style={{ marginTop: '.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                      <label><strong>Departure Time</strong></label>
+                      <input
+                        value={s.departureTime || ''}
+                        onChange={(e) => handleScheduleChange(s.id, 'departureTime', e.target.value)}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                      <label><strong>Arrival Time (display only)</strong></label>
+                      <input
+                        value={s.arrivalTime || ''}
+                        onChange={(e) => handleScheduleChange(s.id, 'arrivalTime', e.target.value)}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                      <button
+                        onClick={async () => {
+                          await updateSchedule(s.id, s);
+                          await refreshSchedules();
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await deleteSchedule(s.id);
+                          await refreshSchedules();
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -268,6 +571,7 @@ function SchedulesPage() {
 function ReservationsPage() {
   const [items, setItems] = useState([]);
   const [mine, setMine] = useState([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [scheduleId, setScheduleId] = useState('');
   const [passengerName, setPassengerName] = useState('');
   const [passengerEmail, setPassengerEmail] = useState('');
@@ -280,6 +584,7 @@ function ReservationsPage() {
     if (me) {
       try { setMine(await getReservationsByUser(me)); } catch {}
     }
+  try { const who = await whoami(); setIsAdmin(who?.role === 'ADMIN'); } catch {}
   })(); }, []);
   const onCreate = async (e) => {
     e.preventDefault();
@@ -310,6 +615,16 @@ function ReservationsPage() {
       <ul>
         {items.map((r) => (<li key={r.id}>{r.status || JSON.stringify(r)}</li>))}
       </ul>
+      {isAdmin && (
+        <div style={{ marginTop: '1rem' }}>
+          <h3>Admin: Delete</h3>
+          {items.map((r) => (
+            <div key={r.id} className="form">
+              <button onClick={async () => { await deleteReservation(r.id); setItems(await getReservations()); }}>Delete</button>
+            </div>
+          ))}
+        </div>
+      )}
       <h3>My Reservations</h3>
       {mine && mine.length > 0 ? (
         <DataTable items={mine} />

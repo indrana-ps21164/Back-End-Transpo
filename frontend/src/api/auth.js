@@ -11,3 +11,8 @@ export const register = async ({ username, password, role }) => {
   const { data } = await client.post('/auth/register', { username, password }, config);
   return data;
 };
+
+export const whoami = async () => {
+  const { data } = await client.get('/auth/whoami');
+  return data;
+};

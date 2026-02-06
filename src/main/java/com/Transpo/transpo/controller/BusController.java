@@ -36,6 +36,12 @@ public class BusController {
         return ResponseEntity.ok(BusMapper.toDto(b));
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<BusDTO> update(@PathVariable Long id, @RequestBody BusDTO dto) {
+        Bus updated = busService.updateBus(id, BusMapper.toEntity(dto));
+        return ResponseEntity.ok(BusMapper.toDto(updated));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         busService.deleteBus(id);

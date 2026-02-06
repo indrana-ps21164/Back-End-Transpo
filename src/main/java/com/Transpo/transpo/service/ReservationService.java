@@ -3,6 +3,7 @@ package com.Transpo.transpo.service;
 import com.Transpo.transpo.exception.BadRequestException;
 import com.Transpo.transpo.exception.ConflictException;
 import com.Transpo.transpo.exception.NotFoundException;
+import com.Transpo.transpo.dto.ReservationDTO;
 import com.Transpo.transpo.model.Reservation;
 import com.Transpo.transpo.model.Schedule;
 import com.Transpo.transpo.repository.ReservationRepository;
@@ -14,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.Transpo.transpo.model.BusStop;
 import com.Transpo.transpo.repository.BusStopRepository;
 import com.Transpo.transpo.repository.DriverAssignmentRepository;
-import org.springframework.transaction.annotation.Transactional;
 
 
 import java.util.List;
@@ -154,6 +154,100 @@ public class ReservationService {
         scheduleRepo.save(schedule);
         
         reservationRepo.delete(r);
+    }
+
+    @Transactional
+    public Reservation updateReservation(Long reservationId, ReservationDTO dto) {
+        if (dto == null) {
+            throw new BadRequestException("Reservation update payload is required");
+        }
+
+        Reservation reservation = reservationRepo.findById(reservationId)
+                .orElseThrow(() -> new NotFoundException("Reservation not found: " + reservationId));
+
+        if (dto.getScheduleId() == null) {
+            throw new BadRequestException("scheduleId is required");
+        }
+
+        Schedule newSchedule = scheduleRepo.findScheduleById(dto.getScheduleId());
+        if (newSchedule == null) {
+            throw new NotFoundException("Schedule not found: " + dto.getScheduleId());
+        }
+
+        if (newSchedule.getBus() == null) {
+            throw new BadRequestException("Schedule does not have a bus assigned");
+        }
+
+        int seatNumber = dto.getSeatNumber();
+        if (seatNumber < 1 || seatNumber > newSchedule.getBus().getTotalSeats()) {
+            throw new BadRequestException("Seat number must be between 1 and " + newSchedule.getBus().getTotalSeats());
+        }
+
+        if (dto.getPassengerName() == null || dto.getPassengerName().isBlank()) {
+            throw new BadRequestException("passengerName is required");
+        }
+        if (dto.getPassengerEmail() == null || dto.getPassengerEmail().isBlank()) {
+            throw new BadRequestException("passengerEmail is required");
+        }
+
+        BusStop pickupStop = null;
+        BusStop dropStop = null;
+
+        if (dto.getPickupStopId() != null) {
+            pickupStop = busStopRepo.findById(dto.getPickupStopId())
+                    .orElseThrow(() -> new NotFoundException("Pickup stop not found: " + dto.getPickupStopId()));
+            if (!pickupStop.getRoute().getId().equals(newSchedule.getRoute().getId())) {
+                throw new BadRequestException("Pickup stop does not belong to this route");
+            }
+        }
+
+        if (dto.getDropStopId() != null) {
+            dropStop = busStopRepo.findById(dto.getDropStopId())
+                    .orElseThrow(() -> new NotFoundException("Drop stop not found: " + dto.getDropStopId()));
+            if (!dropStop.getRoute().getId().equals(newSchedule.getRoute().getId())) {
+                throw new BadRequestException("Drop stop does not belong to this route");
+            }
+        }
+
+        if (pickupStop != null && dropStop != null) {
+            if (pickupStop.getSequence() >= dropStop.getSequence()) {
+                throw new BadRequestException("Pickup stop must come before drop stop in the route");
+            }
+        }
+
+        Schedule oldSchedule = reservation.getSchedule();
+        if (oldSchedule == null) {
+            throw new BadRequestException("Reservation has no associated schedule");
+        }
+
+        boolean scheduleChanged = !oldSchedule.getId().equals(newSchedule.getId());
+
+        if (scheduleChanged && newSchedule.getAvailableSeats() <= 0) {
+            throw new ConflictException("No seats available");
+        }
+
+        List<Reservation> existing = reservationRepo.findByScheduleId(newSchedule.getId());
+        for (Reservation r : existing) {
+            if (!r.getId().equals(reservationId) && r.getSeatNumber() == seatNumber) {
+                throw new ConflictException("Seat " + seatNumber + " already taken for this schedule");
+            }
+        }
+
+        if (scheduleChanged) {
+            oldSchedule.setAvailableSeats(oldSchedule.getAvailableSeats() + 1);
+            newSchedule.setAvailableSeats(newSchedule.getAvailableSeats() - 1);
+            scheduleRepo.save(oldSchedule);
+            scheduleRepo.save(newSchedule);
+        }
+
+        reservation.setSchedule(newSchedule);
+        reservation.setPassengerName(dto.getPassengerName());
+        reservation.setPassengerEmail(dto.getPassengerEmail());
+        reservation.setSeatNumber(seatNumber);
+        reservation.setPickupStop(pickupStop);
+        reservation.setDropStop(dropStop);
+
+        return reservationRepo.save(reservation);
     }
 
     /**
