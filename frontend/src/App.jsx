@@ -189,7 +189,7 @@ function BusesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [newBus, setNewBus] = useState({ busNumber: '', totalSeats: 40 });
+  const [newBus, setNewBus] = useState({ busNumber: '', busName: '', totalSeats: 40 });
 
   useState(() => {
     (async () => {
@@ -231,10 +231,17 @@ function BusesPage() {
             <h3>Add Bus</h3>
             <div className="form" style={{ flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                <label><strong>Bus Name / Number</strong></label>
+                <label><strong>Bus Number</strong></label>
                 <input
                   value={newBus.busNumber}
                   onChange={(e) => setNewBus({ ...newBus, busNumber: e.target.value })}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                <label><strong>Bus Name</strong></label>
+                <input
+                  value={newBus.busName}
+                  onChange={(e) => setNewBus({ ...newBus, busName: e.target.value })}
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
@@ -248,7 +255,7 @@ function BusesPage() {
               <button
                 onClick={async () => {
                   await createBus(newBus);
-                  setNewBus({ busNumber: '', totalSeats: 40 });
+                  setNewBus({ busNumber: '', busName: '', totalSeats: 40 });
                   await refreshBuses();
                 }}
               >
@@ -262,10 +269,17 @@ function BusesPage() {
             {items.map((b) => (
               <div key={b.id} className="form" style={{ flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                  <label><strong>Bus Name / Number</strong></label>
+                  <label><strong>Bus Number</strong></label>
                   <input
-                    value={b.busName || b.busNumber || b.number || ''}
+                    value={b.busNumber || ''}
                     onChange={(e) => handleBusChange(b.id, 'busNumber', e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                  <label><strong>Bus Name</strong></label>
+                  <input
+                    value={b.busName || ''}
+                    onChange={(e) => handleBusChange(b.id, 'busName', e.target.value)}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
@@ -308,7 +322,20 @@ function RoutesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [newRoute, setNewRoute] = useState({ name: '', origin: '', destination: '' });
+  const [newRoute, setNewRoute] = useState({
+    origin: '',
+    destination: '',
+    stop01: '',
+    stop02: '',
+    stop03: '',
+    stop04: '',
+    stop05: '',
+    stop06: '',
+    stop07: '',
+    stop08: '',
+    stop09: '',
+    stop10: '',
+  });
 
   useState(() => {
     (async () => {
@@ -347,13 +374,6 @@ function RoutesPage() {
             <h3>Add Route</h3>
             <div className="form" style={{ flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                <label><strong>Route Name</strong></label>
-                <input
-                  value={newRoute.name}
-                  onChange={(e) => setNewRoute({ ...newRoute, name: e.target.value })}
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
                 <label><strong>Origin</strong></label>
                 <input
                   value={newRoute.origin}
@@ -367,10 +387,37 @@ function RoutesPage() {
                   onChange={(e) => setNewRoute({ ...newRoute, destination: e.target.value })}
                 />
               </div>
+              {[1,2,3,4,5,6,7,8,9,10].map((n) => (
+                <div key={n} style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                  <label><strong>{`Stop${n.toString().padStart(2,'0')}`}</strong></label>
+                  <input
+                    value={newRoute[`stop${n.toString().padStart(2,'0')}`] || ''}
+                    onChange={(e) =>
+                      setNewRoute({
+                        ...newRoute,
+                        [`stop${n.toString().padStart(2,'0')}`]: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              ))}
               <button
                 onClick={async () => {
                   await createRoute(newRoute);
-                  setNewRoute({ name: '', origin: '', destination: '' });
+                  setNewRoute({
+                    origin: '',
+                    destination: '',
+                    stop01: '',
+                    stop02: '',
+                    stop03: '',
+                    stop04: '',
+                    stop05: '',
+                    stop06: '',
+                    stop07: '',
+                    stop08: '',
+                    stop09: '',
+                    stop10: '',
+                  });
                   await refreshRoutes();
                 }}
               >
@@ -383,13 +430,6 @@ function RoutesPage() {
             <h3>Admin: Edit/Delete</h3>
             {items.map((r) => (
               <div key={r.id} className="form" style={{ flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                  <label><strong>Route Name</strong></label>
-                  <input
-                    value={r.name || r.routeName || ''}
-                    onChange={(e) => handleRouteChange(r.id, 'name', e.target.value)}
-                  />
-                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
                   <label><strong>Origin</strong></label>
                   <input
@@ -404,6 +444,21 @@ function RoutesPage() {
                     onChange={(e) => handleRouteChange(r.id, 'destination', e.target.value)}
                   />
                 </div>
+                {[1,2,3,4,5,6,7,8,9,10].map((n) => (
+                  <div key={n} style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                    <label><strong>{`Stop${n.toString().padStart(2,'0')}`}</strong></label>
+                    <input
+                      value={r[`stop${n.toString().padStart(2,'0')}`] || ''}
+                      onChange={(e) =>
+                        handleRouteChange(
+                          r.id,
+                          `stop${n.toString().padStart(2,'0')}`,
+                          e.target.value,
+                        )
+                      }
+                    />
+                  </div>
+                ))}
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
                   <button
                     onClick={async () => {
