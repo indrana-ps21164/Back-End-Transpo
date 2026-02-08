@@ -573,13 +573,19 @@ function SchedulesPage() {
               <div key={s.id} style={{ borderTop: '1px dashed #eee', padding: '.5rem 0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <strong>{s.departureTime || s.time || '—'}</strong>
-                  <span>{s.arrivalTime ? `→ ${s.arrivalTime}` : ''}</span>
                 </div>
                 <div style={{ fontSize: '.9rem', color: '#555' }}>
                   Bus: {s.busNumber || s.bus?.number || 'N/A'} · Stop: {s.stopName || s.stop?.name || 'N/A'}
                 </div>
                 {isAdmin && (
                   <div className="form" style={{ marginTop: '.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                      <label><strong>Bus ID</strong></label>
+                      <input
+                        value={s.busId || ''}
+                        onChange={(e) => handleScheduleChange(s.id, 'busId', e.target.value)}
+                      />
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
                       <label><strong>Departure Time</strong></label>
                       <input
@@ -588,10 +594,10 @@ function SchedulesPage() {
                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                      <label><strong>Arrival Time (display only)</strong></label>
+                      <label><strong>Route ID</strong></label>
                       <input
-                        value={s.arrivalTime || ''}
-                        onChange={(e) => handleScheduleChange(s.id, 'arrivalTime', e.target.value)}
+                        value={s.routeId || ''}
+                        onChange={(e) => handleScheduleChange(s.id, 'routeId', e.target.value)}
                       />
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>

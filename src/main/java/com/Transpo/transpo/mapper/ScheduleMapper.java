@@ -1,6 +1,8 @@
 package com.Transpo.transpo.mapper;
 
 import com.Transpo.transpo.dto.ScheduleDTO;
+import com.Transpo.transpo.model.Bus;
+import com.Transpo.transpo.model.Route;
 import com.Transpo.transpo.model.Schedule;
 import com.Transpo.transpo.repository.BusRepository;
 import com.Transpo.transpo.repository.RouteRepository;
@@ -9,81 +11,65 @@ import org.springframework.stereotype.Component;
 @Component
 public class ScheduleMapper {
 
-    private static BusRepository busRepository;
-    private static RouteRepository routeRepository;
+    private final BusRepository busRepository;
+    private final RouteRepository routeRepository;
 
-    // Constructor injection for static fields
     public ScheduleMapper(BusRepository busRepository, RouteRepository routeRepository) {
-        ScheduleMapper.busRepository = busRepository;
-        ScheduleMapper.routeRepository = routeRepository;
+        this.busRepository = busRepository;
+        this.routeRepository = routeRepository;
     }
 
-    public static ScheduleDTO toDto(Schedule s) {
-        if (s == null) return null;
-        
-        ScheduleDTO d = new ScheduleDTO();
-        d.setId(s.getId());
-        
-        // Set bus details
-        if (s.getBus() != null) {
-            d.setBusId(s.getBus().getId());
-            d.setBusNumber(s.getBus().getBusNumber());
-        } else if (s.getBus() == null && busRepository != null) {
-            // Try to load bus if not already loaded
-            s.setBus(busRepository.findById(s.getBusId()).orElse(null));
-            if (s.getBus() != null) {
-                d.setBusId(s.getBus().getId());
-                d.setBusNumber(s.getBus().getBusNumber());
-            }
+    public ScheduleDTO toDto(Schedule schedule) {
+        if (schedule == null) return null;
+        ScheduleDTO dto = new ScheduleDTO();
+        dto.setId(schedule.getId());
+        if (schedule.getBus() != null) {
+            dto.setBusId(schedule.getBus().getId());
+            dto.setBusNumber(schedule.getBus().getBusNumber());
         }
-        
-        // Set route details
-        if (s.getRoute() != null) {
-            d.setRouteId(s.getRoute().getId());
-            d.setOrigin(s.getRoute().getOrigin());
-            d.setDestination(s.getRoute().getDestination());
-        } else if (s.getRoute() == null && routeRepository != null) {
-            // Try to load route if not already loaded
-            s.setRoute(routeRepository.findById(s.getRouteId()).orElse(null));
-            if (s.getRoute() != null) {
-                d.setRouteId(s.getRoute().getId());
-                d.setOrigin(s.getRoute().getOrigin());
-                d.setDestination(s.getRoute().getDestination());
-            }
+        if (schedule.getRoute() != null) {
+            Route route = schedule.getRoute();
+            dto.setRouteId(route.getId());
+            dto.setOrigin(route.getOrigin());
+            dto.setDestination(route.getDestination());
+            // copy stop fields so frontend can show updated non-null stops
+            dto.setStop01(route.getStop01());
+            dto.setStop02(route.getStop02());
+            dto.setStop03(route.getStop03());
+            dto.setStop04(route.getStop04());
+            dto.setStop05(route.getStop05());
+            dto.setStop06(route.getStop06());
+            dto.setStop07(route.getStop07());
+            dto.setStop08(route.getStop08());
+            dto.setStop09(route.getStop09());
+            dto.setStop10(route.getStop10());
         }
-        
-        d.setDepartureTime(s.getDepartureTime());
-        d.setFare(s.getFare());
-        d.setAvailableSeats(s.getAvailableSeats());
-        return d;
+        dto.setDepartureTime(schedule.getDepartureTime());
+        dto.setFare(schedule.getFare());
+        dto.setAvailableSeats(schedule.getAvailableSeats());
+        return dto;
     }
-    
-    // Helper method to create a schedule from DTO
-    public static Schedule toEntity(ScheduleDTO dto) {
+
+    public Schedule toEntity(ScheduleDTO dto) {
         if (dto == null) return null;
-        
         Schedule schedule = new Schedule();
         schedule.setId(dto.getId());
-        
-        // Set bus (just set the ID, service will load full entity)
-        if (dto.getBusId() != null) {
-            // Create a minimal bus with just ID
-            com.Transpo.transpo.model.Bus bus = new com.Transpo.transpo.model.Bus();
-            bus.setId(dto.getBusId());
-            schedule.setBus(bus);
-        }
-        
-        // Set route (just set the ID, service will load full entity)
-        if (dto.getRouteId() != null) {
-            com.Transpo.transpo.model.Route route = new com.Transpo.transpo.model.Route();
-            route.setId(dto.getRouteId());
-            schedule.setRoute(route);
-        }
-        
         schedule.setDepartureTime(dto.getDepartureTime());
         schedule.setFare(dto.getFare());
         schedule.setAvailableSeats(dto.getAvailableSeats());
-        
-        return schedule;
+
+    if (dto.getBusId() != null) {
+        Bus bus = busRepository.findById(dto.getBusId())
+            .orElseThrow(() -> new IllegalArgumentException("Bus not found with id " + dto.getBusId()));
+        schedule.setBus(bus);
+    }
+
+    if (dto.getRouteId() != null) {
+        Route route = routeRepository.findById(dto.getRouteId())
+            .orElseThrow(() -> new IllegalArgumentException("Route not found with id " + dto.getRouteId()));
+        schedule.setRoute(route);
+    }
+
+    return schedule;
     }
 }
