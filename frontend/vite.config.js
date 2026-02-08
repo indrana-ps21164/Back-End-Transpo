@@ -11,6 +11,10 @@ export default defineConfig({
         changeOrigin: true,
   // Keep path as-is to match backend @RequestMapping("/api/**")
       },
+      '/auth': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -59,4 +59,18 @@ public class ScheduleController {
         var info = service.getSeatInfo(id);
         return ResponseEntity.ok(info);
     }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ScheduleResponseDTO> update(@PathVariable Long id, @RequestBody Schedule s) {
+        Schedule updated = service.update(id, s);
+        ScheduleResponseDTO dto = scheduleRepository.findScheduleDetailsById(updated.getId())
+                .orElseThrow(() -> new RuntimeException("Schedule not found"));
+        return ResponseEntity.ok(dto);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(@PathVariable Long id) {
+        service.delete(id);
+        return ResponseEntity.ok().build();
+    }
 }

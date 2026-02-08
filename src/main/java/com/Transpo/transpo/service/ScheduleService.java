@@ -118,4 +118,40 @@ public class ScheduleService {
         public int getAvailableSeats() { return availableSeats; }
         public int getTotalSeats() { return totalSeats; }
     }
+
+    @Transactional
+    public Schedule update(Long id, Schedule s) {
+        Schedule existing = scheduleRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Schedule not found with id: " + id));
+
+        // Update primitive fields
+        existing.setDepartureTime(s.getDepartureTime() != null ? s.getDepartureTime() : existing.getDepartureTime());
+        existing.setAvailableSeats(s.getAvailableSeats() > 0 ? s.getAvailableSeats() : existing.getAvailableSeats());
+        // Optionally update fare if provided
+        if (s.getFare() > 0) {
+            existing.setFare(s.getFare());
+        }
+
+        // Update associations if ids provided
+        if (s.getBus() != null && s.getBus().getId() != null) {
+            Bus bus = busRepository.findById(s.getBus().getId())
+                    .orElseThrow(() -> new NotFoundException("Bus not found with id: " + s.getBus().getId()));
+            existing.setBus(bus);
+        }
+        if (s.getRoute() != null && s.getRoute().getId() != null) {
+            Route route = routeRepository.findById(s.getRoute().getId())
+                    .orElseThrow(() -> new NotFoundException("Route not found with id: " + s.getRoute().getId()));
+            existing.setRoute(route);
+        }
+
+        return scheduleRepo.save(existing);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        Schedule existing = scheduleRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Schedule not found with id: " + id));
+        // Optionally ensure related reservations handled by cascade or service rules
+        scheduleRepo.delete(existing);
+    }
 }
