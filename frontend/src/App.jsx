@@ -682,9 +682,47 @@ function ReservationsPage() {
         <input placeholder="Drop Stop ID (optional)" value={dropStopId} onChange={(e) => setDropStopId(e.target.value)} />
         <button type="submit">Create</button>
       </form>
-      <ul>
-        {items.map((r) => (<li key={r.id}>{r.status || JSON.stringify(r)}</li>))}
-      </ul>
+      {items && items.length > 0 ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.75rem' }}>
+          {items.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                padding: '0.75rem 1rem',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                background: '#fff',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <strong>Reservation #{r.id}</strong>
+                <span style={{ fontSize: '.8rem', color: '#666' }}>
+                  Seat {r.seatNumber}
+                </span>
+              </div>
+              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
+                <div><strong>Schedule ID:</strong> {r.scheduleId}</div>
+                <div><strong>Name:</strong> {r.passengerName}</div>
+                <div><strong>Email:</strong> {r.passengerEmail}</div>
+                {r.pickupStopId && (
+                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
+                )}
+                {r.dropStopId && (
+                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
+                )}
+                {r.bookingTime && (
+                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
+                    Booked at: {String(r.bookingTime).replace('T', ' ')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style={{ marginTop: '0.75rem' }}>No reservations found.</p>
+      )}
       {isAdmin && (
         <div style={{ marginTop: '1rem' }}>
           <h3>Admin: Delete</h3>
