@@ -650,17 +650,25 @@ function ReservationsPage() {
   })(); }, []);
   const onCreate = async (e) => {
     e.preventDefault();
-    await createReservation({
-      scheduleId: Number(scheduleId),
-      passengerName,
-      passengerEmail,
-      seatNumber: Number(seatNumber),
-      pickupStopId: pickupStopId ? Number(pickupStopId) : undefined,
-      dropStopId: dropStopId ? Number(dropStopId) : undefined,
-    });
-    setItems(await getReservations());
-    const me = localStorage.getItem('token');
-    if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
+    try {
+      await createReservation({
+        scheduleId: Number(scheduleId),
+        passengerName,
+        passengerEmail,
+        seatNumber: Number(seatNumber),
+        pickupStopId: pickupStopId ? Number(pickupStopId) : undefined,
+        dropStopId: dropStopId ? Number(dropStopId) : undefined,
+      });
+      setItems(await getReservations());
+      const me = localStorage.getItem('token');
+      if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
+    } catch (err) {
+      alert(
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        'Failed to create reservation'
+      );
+    }
   };
   return (
     <div>
@@ -689,7 +697,43 @@ function ReservationsPage() {
       )}
       <h3>My Reservations</h3>
       {mine && mine.length > 0 ? (
-        <DataTable items={mine} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
+          {mine.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                padding: '0.75rem 1rem',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                background: '#fafafa',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <strong>Reservation #{r.id}</strong>
+                <span style={{ fontSize: '.8rem', color: '#666' }}>
+                  Seat {r.seatNumber}
+                </span>
+              </div>
+              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
+                <div><strong>Schedule:</strong> {r.scheduleId}</div>
+                <div><strong>Name:</strong> {r.passengerName}</div>
+                <div><strong>Email:</strong> {r.passengerEmail}</div>
+                {r.pickupStopId && (
+                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
+                )}
+                {r.dropStopId && (
+                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
+                )}
+                {r.bookingTime && (
+                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
+                    Booked at: {String(r.bookingTime).replace('T', ' ')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <p>No Reservations</p>
       )}

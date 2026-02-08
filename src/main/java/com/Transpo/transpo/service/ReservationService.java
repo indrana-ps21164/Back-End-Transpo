@@ -317,4 +317,8 @@ public class ReservationService {
                 .flatMap(s -> reservationRepo.findByScheduleId(s.getId()).stream())
                 .collect(Collectors.toList());
     }
+
+    public List<Reservation> getAllReservations() {
+        return reservationRepo.findAll();
+    }
 }
