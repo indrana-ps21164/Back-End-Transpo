@@ -573,9 +573,10 @@ function SchedulesPage() {
               <div key={s.id} style={{ borderTop: '1px dashed #eee', padding: '.5rem 0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <strong>{s.departureTime || s.time || '—'}</strong>
+                  <span>ID: {s.id}</span>
                 </div>
                 <div style={{ fontSize: '.9rem', color: '#555' }}>
-                  Bus: {s.busNumber || s.bus?.number || 'N/A'} · Stop: {s.stopName || s.stop?.name || 'N/A'}
+                  Bus: {s.busNumber || s.bus?.number || 'N/A'} · Route ID: {s.routeId || 'N/A'}
                 </div>
                 {isAdmin && (
                   <div className="form" style={{ marginTop: '.5rem', flexWrap: 'wrap' }}>
