@@ -30,5 +30,16 @@ export const getReservationsByUser = (email) =>
 export const deleteReservation = (id) =>
 	client.delete(`/api/reservations/${id}`).then(r => r.data);
 
+export async function getMyReservations() {
+  const res = await fetch('/api/reservations/me', {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('Failed to load reservations');
+  return res.json();
+}
+
 // Map API
 export const getMapData = () => client.get('/api/map').then(r => r.data);

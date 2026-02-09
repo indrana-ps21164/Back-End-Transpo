@@ -28,6 +28,8 @@ public class Reservation {
 
     private LocalDateTime bookingTime = LocalDateTime.now();
 
+    private String username; // logged-in username of passenger
+
     public Reservation() {
     }
 
@@ -84,5 +86,13 @@ public class Reservation {
 
     public void setBookingTime(LocalDateTime bookingTime) {
         this.bookingTime = bookingTime;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 }

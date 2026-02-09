@@ -1,6 +1,7 @@
 package com.Transpo.transpo.repository;
 
 import com.Transpo.transpo.dto.ScheduleResponseDTO;
+import com.Transpo.transpo.model.Bus;
 import com.Transpo.transpo.model.Schedule;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -36,4 +37,6 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
            "JOIN s.bus b " +
            "JOIN s.route r")
     List<ScheduleResponseDTO> findAllScheduleDetails();
+
+    List<Schedule> findByBus(Bus bus);
 }
