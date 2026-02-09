@@ -717,6 +717,22 @@ function ReservationsPage() {
                   </div>
                 )}
               </div>
+              <div style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem' }}>
+                {r.paid ? (
+                  <span style={{ color: 'green' }}>Paid ({r.paymentMethod || '—'})</span>
+                ) : (
+                  <button onClick={async () => {
+                    try {
+                      await payReservation(r.id, 'CASH');
+                      setItems(await getReservations());
+                      const me = localStorage.getItem('token');
+                      if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
+                    } catch (e) {
+                      alert('Payment failed');
+                    }
+                  }}>Pay</button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -767,6 +783,20 @@ function ReservationsPage() {
                   <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
                     Booked at: {String(r.bookingTime).replace('T', ' ')}
                   </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem' }}>
+                {r.paid ? (
+                  <span style={{ color: 'green' }}>Paid ({r.paymentMethod || '—'})</span>
+                ) : (
+                  <button onClick={async () => {
+                    try {
+                      await payReservation(r.id, 'CASH');
+                      setMine(await getReservationsByUser(localStorage.getItem('token') || ''));
+                    } catch (e) {
+                      alert('Payment failed');
+                    }
+                  }}>Pay</button>
                 )}
               </div>
             </div>
