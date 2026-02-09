@@ -77,6 +77,7 @@ import {
 function DriverDashboard() {
   const [me, setMe] = useState(null);
   const [bus, setBus] = useState(null);
+  const [newBusId, setNewBusId] = useState('');
   const [lat, setLat] = useState(null);
   const [lng, setLng] = useState(null);
   const [msg, setMsg] = useState('');
@@ -129,6 +130,20 @@ function DriverDashboard() {
       <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.5rem' }}>
         <button onClick={sendLocationFromBrowser}>Update My Live Location</button>
         <button onClick={refreshLocation}>Refresh</button>
+      </div>
+      <div className="form" style={{ gap: '.5rem', marginBottom: '.5rem' }}>
+        <label><strong>Change Assigned Bus ID</strong></label>
+        <input type="number" value={newBusId} onChange={(e) => setNewBusId(e.target.value)} placeholder="Bus ID" />
+        <button onClick={async () => {
+          if (!newBusId) return;
+          try {
+            const updated = await changeDriverBus(Number(newBusId));
+            setBus(updated);
+            setMsg('Assigned bus updated');
+          } catch (e) {
+            setMsg(e?.response?.data?.message || 'Failed to change bus');
+          }
+        }}>Change Bus</button>
       </div>
       {msg && <p>{msg}</p>}
       <LiveMap lat={lat} lng={lng} />

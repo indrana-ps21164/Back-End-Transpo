@@ -34,6 +34,9 @@ public class DriverController {
     @PutMapping("/my-bus")
     public ResponseEntity<Bus> changeMyBus(@RequestBody Map<String, Long> request) {
         Long busId = request.get("busId");
+        if (busId == null || busId <= 0) {
+            return ResponseEntity.badRequest().build();
+        }
         Bus bus = driverService.changeAssignedBus(busId);
         return ResponseEntity.ok(bus);
     }

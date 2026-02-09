@@ -44,5 +44,6 @@ export const payReservation = (reservationId, method = 'CASH', reference = '') =
 
 // Driver APIs
 export const fetchDriverBus = () => client.get('/api/driver/my-bus').then(r => r.data);
+export const changeDriverBus = (busId) => client.put('/api/driver/my-bus', { busId }).then(r => r.data);
 export const updateMyLocation = (lat, lng) => client.post('/api/driver/location', { lat, lng }).then(r => r.data);
 export const getMyLocation = () => client.get('/api/driver/location').then(r => r.data);
