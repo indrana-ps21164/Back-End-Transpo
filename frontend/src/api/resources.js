@@ -31,15 +31,19 @@ export const deleteReservation = (id) =>
 	client.delete(`/api/reservations/${id}`).then(r => r.data);
 
 export async function getMyReservations() {
-  const res = await fetch('/api/reservations/me', {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error('Failed to load reservations');
-  return res.json();
+  const { data } = await client.get('/api/reservations/me');
+  return data;
 }
 
 // Map API
 export const getMapData = () => client.get('/api/map').then(r => r.data);
+
+// Payments
+export const payReservation = (reservationId, method = 'CASH', reference = '') =>
+  client.post('/api/payments', { reservationId, method, reference }).then(r => r.data);
+
+// Driver APIs
+export const fetchDriverBus = () => client.get('/api/driver/my-bus').then(r => r.data);
+export const changeDriverBus = (busId) => client.put('/api/driver/my-bus', { busId }).then(r => r.data);
+export const updateMyLocation = (lat, lng) => client.post('/api/driver/location', { lat, lng }).then(r => r.data);
+export const getMyLocation = () => client.get('/api/driver/location').then(r => r.data);
