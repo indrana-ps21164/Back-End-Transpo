@@ -8,7 +8,6 @@ import com.Transpo.transpo.model.Reservation;
 import com.Transpo.transpo.model.Schedule;
 import com.Transpo.transpo.repository.ReservationRepository;
 import com.Transpo.transpo.repository.ScheduleRepository;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -18,7 +17,6 @@ import com.Transpo.transpo.repository.BusStopRepository;
 import com.Transpo.transpo.repository.DriverAssignmentRepository;
 
 
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -130,11 +128,6 @@ public class ReservationService {
         res.setSeatNumber(seatNumber);
         res.setPickupStop(pickupStop);
         res.setDropStop(dropStop);
-        // set username from logged-in user
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated()) {
-            res.setUsername(auth.getName());
-        }
 
         return reservationRepo.save(res);
     }
@@ -323,18 +316,6 @@ public class ReservationService {
         return schedules.stream()
                 .flatMap(s -> reservationRepo.findByScheduleId(s.getId()).stream())
                 .collect(Collectors.toList());
-    }
-
-    /**
-     * Get reservations for the currently logged-in user
-     */
-    public List<Reservation> getReservationsForCurrentUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
-            return Collections.emptyList();
-        }
-        String username = auth.getName();
-        return reservationRepo.findByUsername(username);
     }
 
     public List<Reservation> getAllReservations() {

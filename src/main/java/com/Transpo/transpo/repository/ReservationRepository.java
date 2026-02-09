@@ -9,6 +9,4 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     List<Reservation> findByPassengerEmail(String email);
     List<Reservation> findByScheduleId(Long scheduleId);
-    List<Reservation> findByUsername(String username);
-    List<Reservation> findByScheduleIdIn(List<Long> scheduleIds);
 }

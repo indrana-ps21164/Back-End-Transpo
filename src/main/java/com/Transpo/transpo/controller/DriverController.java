@@ -9,15 +9,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.security.core.Authentication;
 
 @RestController
 @RequestMapping("/api/driver")
 public class DriverController {
     
     private final DriverService driverService;
-    private final Map<String, Map<String, Object>> liveLocations = new ConcurrentHashMap<>();
     
     public DriverController(DriverService driverService) {
         this.driverService = driverService;
@@ -34,9 +31,6 @@ public class DriverController {
     @PutMapping("/my-bus")
     public ResponseEntity<Bus> changeMyBus(@RequestBody Map<String, Long> request) {
         Long busId = request.get("busId");
-        if (busId == null || busId <= 0) {
-            return ResponseEntity.badRequest().build();
-        }
         Bus bus = driverService.changeAssignedBus(busId);
         return ResponseEntity.ok(bus);
     }
@@ -83,45 +77,5 @@ public class DriverController {
     public ResponseEntity<Map<String, Object>> getMapData(@PathVariable Long routeId) {
         Map<String, Object> mapData = driverService.getMapData(routeId);
         return ResponseEntity.ok(mapData);
-    }
-
-    // Live location: driver posts current lat/lng; stored in-memory keyed by username
-    @PostMapping("/location")
-    public ResponseEntity<Map<String, Object>> updateLocation(@RequestBody Map<String, Object> payload,
-                                                              Authentication auth) {
-        if (auth == null || !auth.isAuthenticated()) {
-            return ResponseEntity.status(401).body(Map.of("message", "unauthenticated"));
-        }
-        String user = auth.getName();
-        Double lat = null, lng = null;
-        try {
-            lat = payload.get("lat") != null ? Double.valueOf(String.valueOf(payload.get("lat"))) : null;
-            lng = payload.get("lng") != null ? Double.valueOf(String.valueOf(payload.get("lng"))) : null;
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", "invalid lat/lng"));
-        }
-        if (lat == null || lng == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "lat and lng required"));
-        }
-        Map<String, Object> info = new ConcurrentHashMap<>();
-        info.put("lat", lat);
-        info.put("lng", lng);
-        info.put("updatedAt", System.currentTimeMillis());
-        liveLocations.put(user, info);
-        return ResponseEntity.ok(info);
-    }
-
-    // Get last known location for current driver
-    @GetMapping("/location")
-    public ResponseEntity<Map<String, Object>> getMyLocation(Authentication auth) {
-        if (auth == null || !auth.isAuthenticated()) {
-            return ResponseEntity.status(401).body(Map.of("message", "unauthenticated"));
-        }
-        String user = auth.getName();
-        Map<String, Object> info = liveLocations.get(user);
-        if (info == null) {
-            return ResponseEntity.ok(Map.of("message", "no location", "lat", null, "lng", null));
-        }
-        return ResponseEntity.ok(info);
     }
 }

@@ -11,7 +11,6 @@ public class ReservationDTO {
     private LocalDateTime bookingTime;
     private Long pickupStopId;  // New field
     private Long dropStopId;    // New field
-    private String username; // logged-in username of passenger
 
 
     public ReservationDTO() {}
@@ -41,13 +40,5 @@ public class ReservationDTO {
 
     public Long getDropStopId() { return dropStopId; }
     public void setDropStopId(Long dropStopId) { this.dropStopId = dropStopId; }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
 
 }

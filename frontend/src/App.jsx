@@ -12,7 +12,6 @@ const Layout = ({ children }) => (
       <Link to="/routes">Routes</Link>
       <Link to="/schedules">Schedules</Link>
       <Link to="/reservations">Reservations</Link>
-  <Link to="/driver">Driver</Link>
       <Link to="/login" style={{ marginLeft: 'auto' }}>Login</Link>
     </nav>
     <main>{children}</main>
@@ -44,7 +43,6 @@ export default function App() {
           <Route path="/schedules" element={<RequireAuth><SchedulesPage /></RequireAuth>} />
           <Route path="/reservations" element={<RequireAuth><ReservationsPage /></RequireAuth>} />
           <Route path="/map" element={<RequireAuth><MapPage /></RequireAuth>} />
-          <Route path="/driver" element={<RequireAuth><DriverDashboard /></RequireAuth>} />
         </Routes>
       </Layout>
     </BrowserRouter>
@@ -52,7 +50,7 @@ export default function App() {
 }
 
 // Lazy simple pages
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { login, register } from './api/auth';
 import {
   getBuses,
@@ -73,113 +71,6 @@ import {
   getMapData,
   getReservationsByUser,
 } from './api/resources';
-// Driver dashboard with live map
-function DriverDashboard() {
-  const [me, setMe] = useState(null);
-  const [bus, setBus] = useState(null);
-  const [newBusId, setNewBusId] = useState('');
-  const [lat, setLat] = useState(null);
-  const [lng, setLng] = useState(null);
-  const [msg, setMsg] = useState('');
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const m = await whoami();
-        setMe(m);
-        const b = await fetchDriverBus();
-        setBus(b);
-        await refreshLocation();
-      } catch {}
-    })();
-    const id = setInterval(refreshLocation, 5000);
-    return () => clearInterval(id);
-  }, []);
-
-  async function refreshLocation() {
-    try {
-      const info = await getMyLocation();
-      if (info?.lat && info?.lng) {
-        setLat(info.lat); setLng(info.lng);
-      }
-    } catch {}
-  }
-
-  async function sendLocationFromBrowser() {
-    if (!navigator.geolocation) {
-      setMsg('Geolocation not supported');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const { latitude, longitude } = pos.coords;
-      try {
-        await updateMyLocation(latitude, longitude);
-        setMsg('Location updated');
-        await refreshLocation();
-      } catch (e) {
-        setMsg(e?.response?.data?.message || 'Failed to update');
-      }
-    }, () => setMsg('Permission denied'));
-  }
-
-  return (
-    <div>
-      <h2>Driver Dashboard</h2>
-      <p><strong>User:</strong> {me?.username} ({me?.role})</p>
-      <p><strong>Bus:</strong> {bus ? `${bus.busNumber} - ${bus.busName}` : 'No bus assigned'}</p>
-      <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.5rem' }}>
-        <button onClick={sendLocationFromBrowser}>Update My Live Location</button>
-        <button onClick={refreshLocation}>Refresh</button>
-      </div>
-      <div className="form" style={{ gap: '.5rem', marginBottom: '.5rem' }}>
-        <label><strong>Change Assigned Bus ID</strong></label>
-        <input type="number" value={newBusId} onChange={(e) => setNewBusId(e.target.value)} placeholder="Bus ID" />
-        <button onClick={async () => {
-          if (!newBusId) return;
-          try {
-            const updated = await changeDriverBus(Number(newBusId));
-            setBus(updated);
-            setMsg('Assigned bus updated');
-          } catch (e) {
-            setMsg(e?.response?.data?.message || 'Failed to change bus');
-          }
-        }}>Change Bus</button>
-      </div>
-      {msg && <p>{msg}</p>}
-      <LiveMap lat={lat} lng={lng} />
-    </div>
-  );
-}
-
-function LiveMap({ lat, lng }) {
-  const [mapEl, setMapEl] = useState(null);
-  useEffect(() => {
-    if (!mapEl) return;
-    // Dynamically import Leaflet to avoid SSR issues
-    (async () => {
-  // Import Leaflet from package
-  const L = await import('leaflet');
-      // Ensure Leaflet CSS is loaded
-      const cssId = 'leaflet-css';
-      if (!document.getElementById(cssId)) {
-        const link = document.createElement('link');
-        link.id = cssId;
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(link);
-      }
-      const map = L.map(mapEl).setView([lat ?? 6.9271, lng ?? 79.8612], lat && lng ? 14 : 12);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
-      if (lat && lng) {
-        L.marker([lat, lng]).addTo(map).bindPopup('My Location');
-      }
-    })();
-  }, [mapEl, lat, lng]);
-  return <div ref={setMapEl} style={{ height: 400, border: '1px solid #ddd' }} />;
-}
 import { whoami } from './api/auth';
 
 // Generic table to render arrays of objects
@@ -826,22 +717,6 @@ function ReservationsPage() {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem' }}>
-                {r.paid ? (
-                  <span style={{ color: 'green' }}>Paid ({r.paymentMethod || '—'})</span>
-                ) : (
-                  <button onClick={async () => {
-                    try {
-                      await payReservation(r.id, 'CASH');
-                      setItems(await getReservations());
-                      const me = localStorage.getItem('token');
-                      if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
-                    } catch (e) {
-                      alert('Payment failed');
-                    }
-                  }}>Pay</button>
-                )}
-              </div>
             </div>
           ))}
         </div>
@@ -892,20 +767,6 @@ function ReservationsPage() {
                   <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
                     Booked at: {String(r.bookingTime).replace('T', ' ')}
                   </div>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem' }}>
-                {r.paid ? (
-                  <span style={{ color: 'green' }}>Paid ({r.paymentMethod || '—'})</span>
-                ) : (
-                  <button onClick={async () => {
-                    try {
-                      await payReservation(r.id, 'CASH');
-                      setMine(await getReservationsByUser(localStorage.getItem('token') || ''));
-                    } catch (e) {
-                      alert('Payment failed');
-                    }
-                  }}>Pay</button>
                 )}
               </div>
             </div>

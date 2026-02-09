@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -19,11 +20,10 @@ import org.springframework.security.web.context.SecurityContextRepository;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private final AuthenticationConfiguration authenticationConfiguration;
+    private final CustomUserDetailService userDetailsService;
 
-    public SecurityConfig(CustomUserDetailService userDetailsService,
-                          AuthenticationConfiguration authenticationConfiguration) {
-        this.authenticationConfiguration = authenticationConfiguration;
+    public SecurityConfig(CustomUserDetailService userDetailsService) {
+        this.userDetailsService = userDetailsService;
     }
 
     @Bean
@@ -31,13 +31,18 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // Expose AuthenticationManager for constructor injection in controllers
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(userDetailsService);
+        authProvider.setPasswordEncoder(passwordEncoder());
+        return authProvider;
+    }
+
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
         return authConfig.getAuthenticationManager();
     }
-
-    // Rely on AuthenticationConfiguration to supply AuthenticationManager; no explicit DaoAuthenticationProvider
 
     @Bean
     public SecurityContextRepository securityContextRepository() {
@@ -53,12 +58,7 @@ public class SecurityConfig {
             // Configure CORS
             .cors(cors -> cors.configurationSource(request -> {
                 var corsConfig = new org.springframework.web.cors.CorsConfiguration();
-                corsConfig.setAllowedOrigins(java.util.List.of(
-                    "http://localhost:3000",
-                    "http://localhost:8080",
-                    "http://localhost:5173",
-                    "http://localhost:5174"
-                ));
+                corsConfig.setAllowedOrigins(java.util.List.of("http://localhost:3000", "http://localhost:8080", "http://localhost:5173"));
                 corsConfig.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                 corsConfig.setAllowedHeaders(java.util.List.of("*"));
                 corsConfig.setAllowCredentials(true);
@@ -126,9 +126,9 @@ public class SecurityConfig {
             )
             
             // Add custom filter to handle /auth/login
-        .addFilterBefore(new CustomLoginFilter(
-            authenticationConfiguration.getAuthenticationManager(),
-            securityContextRepository()), 
+            .addFilterBefore(new CustomLoginFilter(
+                    authenticationManager(null), 
+                    securityContextRepository()), 
                 UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
