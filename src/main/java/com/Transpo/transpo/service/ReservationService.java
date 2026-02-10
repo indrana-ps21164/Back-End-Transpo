@@ -70,6 +70,9 @@ public class ReservationService {
         }
 
         int maxSeat = schedule.getBus().getTotalSeats();
+        if (maxSeat < 1) {
+            throw new BadRequestException("Bus capacity is invalid for this schedule");
+        }
         if (seatNumber < 1 || seatNumber > maxSeat) {
             throw new BadRequestException("Seat number must be between 1 and " + maxSeat);
         }
@@ -78,11 +81,15 @@ public class ReservationService {
             throw new ConflictException("No seats available");
         }
 
-        // Check duplicate seat booking
+        // Check duplicate seat booking and duplicate booking by the same user
         List<Reservation> existing = reservationRepo.findByScheduleId(scheduleId);
+        String currentUser = getCurrentUsername();
         for (Reservation r : existing) {
             if (r.getSeatNumber() == seatNumber) {
                 throw new ConflictException("Seat " + seatNumber + " already taken for this schedule");
+            }
+            if (r.getUsername() != null && r.getUsername().equals(currentUser)) {
+                throw new ConflictException("You have already booked a seat on this schedule");
             }
         }
 

@@ -1,23 +1,31 @@
-import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
+import AdminDashboard from './components/AdminDashboard';
+import { whoami } from './api/auth';
 import './App.css';
 
 // Simple auth util
 const isAuthed = () => !!localStorage.getItem('token');
 
-const Layout = ({ children }) => (
-  <div className="container">
-    <nav className="nav">
-      <Link to="/">Dashboard</Link>
-      <Link to="/buses">Buses</Link>
-      <Link to="/routes">Routes</Link>
-      <Link to="/schedules">Schedules</Link>
-      <Link to="/reservations">Reservations</Link>
-  <Link to="/driver">Driver</Link>
-      <Link to="/login" style={{ marginLeft: 'auto' }}>Login</Link>
-    </nav>
-    <main>{children}</main>
-  </div>
-);
+const Layout = ({ children }) => {
+  const [me, setMe] = useState(null);
+  useEffect(() => { (async () => { try { setMe(await whoami()); } catch {} })(); }, []);
+  const isAdmin = me?.role === 'ADMIN';
+  return (
+    <div className="container">
+      <nav className="nav">
+        <Link to="/">Dashboard</Link>
+        {isAdmin && <Link to="/admin">Admin</Link>}
+        <Link to="/buses">Buses</Link>
+        <Link to="/routes">Routes</Link>
+        <Link to="/schedules">Schedules</Link>
+        <Link to="/reservations">Reservations</Link>
+        <Link to="/driver">Driver</Link>
+        <Link to="/login" style={{ marginLeft: 'auto' }}>Login</Link>
+      </nav>
+      <main>{children}</main>
+    </div>
+  );
+};
 
 const RequireAuth = ({ children }) => {
   if (!isAuthed()) return <Navigate to="/login" replace />;
@@ -43,6 +51,7 @@ export default function App() {
           <Route path="/reservations" element={<RequireAuth><ReservationsPage /></RequireAuth>} />
           <Route path="/map" element={<RequireAuth><MapPage /></RequireAuth>} />
           <Route path="/driver" element={<RequireAuth><DriverDashboard /></RequireAuth>} />
+          <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
         </Routes>
       </Layout>
     </BrowserRouter>
@@ -730,28 +739,38 @@ function SchedulesPage() {
 }
 
 function ReservationsPage() {
-  const [items, setItems] = useState([]);
+  const navigate = useNavigate();
   const [mine, setMine] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [scheduleId, setScheduleId] = useState('');
   const [passengerName, setPassengerName] = useState('');
   const [passengerEmail, setPassengerEmail] = useState('');
   const [seatNumber, setSeatNumber] = useState(1);
-  const [pickupStopId, setPickupStopId] = useState('');
-  const [dropStopId, setDropStopId] = useState('');
+  const [pickupStop, setPickupStop] = useState('');
+  const [dropStop, setDropStop] = useState('');
+  const [paymentNumber, setPaymentNumber] = useState('');
+  const [securityKey, setSecurityKey] = useState('');
 
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
         setError('');
-        const all = await getReservations();
-        setItems(all || []);
+        setSuccess('');
         const me = localStorage.getItem('token');
         if (me) {
           try { setMine(await getReservationsByUser(me)); } catch {}
         }
+        // Prefill from query params
+        const params = new URLSearchParams(window.location.search);
+        const sched = params.get('scheduleId');
+        const p = params.get('pickup');
+        const d = params.get('drop');
+        if (sched) setScheduleId(sched);
+        if (p) setPickupStop(p);
+        if (d) setDropStop(d);
       } catch (e) {
         setError(e?.response?.data?.message || e?.message || 'Failed to load reservations');
       } finally {
@@ -760,25 +779,49 @@ function ReservationsPage() {
     })();
   }, []);
 
-  const onCreate = async (e) => {
+  const handleReserveCreate = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
+    // Validate fake payment inputs
+    if (!/^\d{10}$/.test(paymentNumber)) {
+      setError('Payment number must be 10 digits.');
+      return;
+    }
+    if (!/^\d{3}$/.test(securityKey)) {
+      setError('Security key must be 3 digits.');
+      return;
+    }
     try {
       await createReservation({
         scheduleId: Number(scheduleId),
         passengerName,
         passengerEmail,
         seatNumber: Number(seatNumber),
-        pickupStopId: pickupStopId ? Number(pickupStopId) : undefined,
-        dropStopId: dropStopId ? Number(dropStopId) : undefined,
+        // Pass pickup/drop names; backend may map to stop IDs
+        pickup: pickupStop,
+        drop: dropStop,
+        status: 'BOOKED',
       });
-      setItems(await getReservations());
       const me = localStorage.getItem('token');
       if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
-      setScheduleId(''); setPassengerName(''); setPassengerEmail(''); setSeatNumber(1);
-      setPickupStopId(''); setDropStopId('');
+      setSuccess('Reservation successful. Seat booked.');
+      // Clear only payment inputs; keep schedule/pickup/drop visible
+      setPaymentNumber(''); setSecurityKey('');
     } catch (e) {
       setError(e?.response?.data?.message || e?.message || 'Failed to create reservation');
+    }
+  };
+
+  const handleGoBack = () => {
+    // Prefer router navigate to preserve SPA history
+    try {
+      navigate(-1);
+    } catch {
+      // Fallback to browser history
+      if (window.history && typeof window.history.back === 'function') {
+        window.history.back();
+      }
     }
   };
 
@@ -788,57 +831,23 @@ function ReservationsPage() {
   return (
     <div>
       <h2>Reservations</h2>
-      <form onSubmit={onCreate} className="form" style={{ flexWrap: 'wrap' }}>
-        <input placeholder="Schedule ID" value={scheduleId} onChange={(e) => setScheduleId(e.target.value)} />
+      <div style={{ marginBottom: '.5rem' }}>
+        <button onClick={handleGoBack}>Go Back</button>
+      </div>
+      {success && <p style={{ color: 'green' }}>{success}</p>}
+      {error && <p style={{ color: 'red' }}>{error} <button style={{ marginLeft: '.5rem' }} onClick={handleGoBack}>Go Back</button></p>}
+      <form onSubmit={handleReserveCreate} className="form" style={{ flexWrap: 'wrap' }}>
+        <input placeholder="Schedule ID" value={scheduleId} readOnly />
         <input placeholder="Passenger Name" value={passengerName} onChange={(e) => setPassengerName(e.target.value)} />
         <input placeholder="Passenger Email" value={passengerEmail} onChange={(e) => setPassengerEmail(e.target.value)} />
         <input placeholder="Seat Number" type="number" value={seatNumber} onChange={(e) => setSeatNumber(e.target.value)} />
-        <input placeholder="Pickup Stop ID (optional)" value={pickupStopId} onChange={(e) => setPickupStopId(e.target.value)} />
-        <input placeholder="Drop Stop ID (optional)" value={dropStopId} onChange={(e) => setDropStopId(e.target.value)} />
+        <input placeholder="Pickup Stop" value={pickupStop} onChange={(e) => setPickupStop(e.target.value)} />
+        <input placeholder="Drop Stop" value={dropStop} onChange={(e) => setDropStop(e.target.value)} />
+        {/* Fake payment section */}
+        <input placeholder="Payment Number (10 digits)" value={paymentNumber} onChange={(e) => setPaymentNumber(e.target.value.replace(/[^0-9]/g, ''))} />
+        <input placeholder="Security Key (3 digits)" value={securityKey} onChange={(e) => setSecurityKey(e.target.value.replace(/[^0-9]/g, ''))} />
         <button type="submit">Create</button>
       </form>
-
-      {items && items.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.75rem' }}>
-          {items.map((r) => (
-            <div
-              key={r.id}
-              style={{
-                border: '1px solid #ddd',
-                borderRadius: 8,
-                padding: '0.75rem 1rem',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                background: '#fff',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                <strong>Reservation #{r.id}</strong>
-                <span style={{ fontSize: '.8rem', color: '#666' }}>
-                  Seat {r.seatNumber}
-                </span>
-              </div>
-              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
-                <div><strong>Schedule ID:</strong> {r.scheduleId}</div>
-                <div><strong>Name:</strong> {r.passengerName}</div>
-                <div><strong>Email:</strong> {r.passengerEmail}</div>
-                {r.pickupStopId && (
-                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
-                )}
-                {r.dropStopId && (
-                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
-                )}
-                {r.bookingTime && (
-                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
-                    Booked at: {String(r.bookingTime).replace('T', ' ')}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p style={{ marginTop: '0.75rem' }}>No reservations found.</p>
-      )}
 
       <h3>My Reservations</h3>
       {mine && mine.length > 0 ? (
@@ -864,11 +873,11 @@ function ReservationsPage() {
                 <div><strong>Schedule:</strong> {r.scheduleId}</div>
                 <div><strong>Name:</strong> {r.passengerName}</div>
                 <div><strong>Email:</strong> {r.passengerEmail}</div>
-                {r.pickupStopId && (
-                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
+                {r.pickup && (
+                  <div><strong>Pickup Stop:</strong> {r.pickup}</div>
                 )}
-                {r.dropStopId && (
-                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
+                {r.drop && (
+                  <div><strong>Drop Stop:</strong> {r.drop}</div>
                 )}
                 {r.bookingTime && (
                   <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
