@@ -27,6 +27,12 @@ public class Reservation {
     private BusStop dropStop;
 
     private LocalDateTime bookingTime = LocalDateTime.now();
+    // Use Boolean to avoid NOT NULL migration issues on existing rows
+    private Boolean paid = false;
+    private String paymentMethod; // optional
+    private String paymentReference; // optional
+
+    private String username; // logged-in username of passenger
 
     public Reservation() {
     }
@@ -84,5 +90,20 @@ public class Reservation {
 
     public void setBookingTime(LocalDateTime bookingTime) {
         this.bookingTime = bookingTime;
+    }
+
+    public boolean isPaid() { return Boolean.TRUE.equals(paid); }
+    public void setPaid(boolean paid) { this.paid = paid; }
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+    public String getPaymentReference() { return paymentReference; }
+    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 }

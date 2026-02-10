@@ -9,7 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/schedules")
@@ -46,6 +45,15 @@ public class ScheduleController {
     public ResponseEntity<List<ScheduleResponseDTO>> list() {
         // Use custom query to get all schedules with details
         List<ScheduleResponseDTO> dtos = scheduleRepository.findAllScheduleDetails();
+        return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<ScheduleResponseDTO>> search(
+            @RequestParam("pickup") String pickup,
+            @RequestParam("drop") String drop
+    ) {
+        List<ScheduleResponseDTO> dtos = scheduleRepository.searchByPickupAndDrop(pickup, drop);
         return ResponseEntity.ok(dtos);
     }
 

@@ -40,6 +40,25 @@ public class ScheduleResponseDTO {
         this.availableSeats = availableSeats;
     }
 
+    // Constructor including stops for richer projections
+    public ScheduleResponseDTO(Long id, Long busId, String busNumber, Long routeId,
+                               String origin, String destination, LocalDateTime departureTime,
+                               double fare, int availableSeats,
+                               String stop01, String stop02, String stop03, String stop04, String stop05,
+                               String stop06, String stop07, String stop08, String stop09, String stop10) {
+        this(id, busId, busNumber, routeId, origin, destination, departureTime, fare, availableSeats);
+        this.stop01 = stop01;
+        this.stop02 = stop02;
+        this.stop03 = stop03;
+        this.stop04 = stop04;
+        this.stop05 = stop05;
+        this.stop06 = stop06;
+        this.stop07 = stop07;
+        this.stop08 = stop08;
+        this.stop09 = stop09;
+        this.stop10 = stop10;
+    }
+
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

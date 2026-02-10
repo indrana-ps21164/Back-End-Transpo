@@ -12,6 +12,7 @@ const Layout = ({ children }) => (
       <Link to="/routes">Routes</Link>
       <Link to="/schedules">Schedules</Link>
       <Link to="/reservations">Reservations</Link>
+  <Link to="/driver">Driver</Link>
       <Link to="/login" style={{ marginLeft: 'auto' }}>Login</Link>
     </nav>
     <main>{children}</main>
@@ -23,11 +24,9 @@ const RequireAuth = ({ children }) => {
   return children;
 };
 
+import PassengerDashboard from './components/PassengerDashboard';
 const Dashboard = () => (
-  <div>
-    <h1>Transpo Dashboard</h1>
-    <p>Welcome to Transpo. Use the navigation to explore.</p>
-  </div>
+  <PassengerDashboard />
 );
 
 export default function App() {
@@ -43,6 +42,7 @@ export default function App() {
           <Route path="/schedules" element={<RequireAuth><SchedulesPage /></RequireAuth>} />
           <Route path="/reservations" element={<RequireAuth><ReservationsPage /></RequireAuth>} />
           <Route path="/map" element={<RequireAuth><MapPage /></RequireAuth>} />
+          <Route path="/driver" element={<RequireAuth><DriverDashboard /></RequireAuth>} />
         </Routes>
       </Layout>
     </BrowserRouter>
@@ -50,7 +50,7 @@ export default function App() {
 }
 
 // Lazy simple pages
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { login, register } from './api/auth';
 import {
   getBuses,
@@ -71,7 +71,115 @@ import {
   getMapData,
   getReservationsByUser,
 } from './api/resources';
-import { whoami } from './api/auth';
+// Driver dashboard with live map
+function DriverDashboard() {
+  const [me, setMe] = useState(null);
+  const [bus, setBus] = useState(null);
+  const [newBusId, setNewBusId] = useState('');
+  const [lat, setLat] = useState(null);
+  const [lng, setLng] = useState(null);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const m = await whoami();
+        setMe(m);
+        const b = await fetchDriverBus();
+        setBus(b);
+        await refreshLocation();
+      } catch {}
+    })();
+    const id = setInterval(refreshLocation, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  async function refreshLocation() {
+    try {
+      const info = await getMyLocation();
+      if (info?.lat && info?.lng) {
+        setLat(info.lat); setLng(info.lng);
+      }
+    } catch {}
+  }
+
+  async function sendLocationFromBrowser() {
+    if (!navigator.geolocation) {
+      setMsg('Geolocation not supported');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      try {
+        await updateMyLocation(latitude, longitude);
+        setMsg('Location updated');
+        await refreshLocation();
+      } catch (e) {
+        setMsg(e?.response?.data?.message || 'Failed to update');
+      }
+    }, () => setMsg('Permission denied'));
+  }
+
+  return (
+    <div>
+      <h2>Driver Dashboard</h2>
+      <p><strong>User:</strong> {me?.username} ({me?.role})</p>
+      <p><strong>Bus:</strong> {bus ? `${bus.busNumber} - ${bus.busName}` : 'No bus assigned'}</p>
+      <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.5rem' }}>
+        <button onClick={sendLocationFromBrowser}>Update My Live Location</button>
+        <button onClick={refreshLocation}>Refresh</button>
+      </div>
+      <div className="form" style={{ gap: '.5rem', marginBottom: '.5rem' }}>
+        <label><strong>Change Assigned Bus ID</strong></label>
+        <input type="number" value={newBusId} onChange={(e) => setNewBusId(e.target.value)} placeholder="Bus ID" />
+        <button onClick={async () => {
+          if (!newBusId) return;
+          try {
+            const updated = await changeDriverBus(Number(newBusId));
+            setBus(updated);
+            setMsg('Assigned bus updated');
+          } catch (e) {
+            setMsg(e?.response?.data?.message || 'Failed to change bus');
+          }
+        }}>Change Bus</button>
+      </div>
+      {msg && <p>{msg}</p>}
+      <LiveMap lat={lat} lng={lng} />
+    </div>
+  );
+}
+
+function LiveMap({ lat, lng }) {
+  const [mapEl, setMapEl] = useState(null);
+  useEffect(() => {
+    if (!mapEl) return;
+    // Dynamically import Leaflet to avoid SSR issues
+    (async () => {
+  // Import Leaflet from package
+  const L = await import('leaflet');
+      // Ensure Leaflet CSS is loaded
+      const cssId = 'leaflet-css';
+      if (!document.getElementById(cssId)) {
+        const link = document.createElement('link');
+        link.id = cssId;
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+      const map = L.map(mapEl).setView([lat ?? 6.9271, lng ?? 79.8612], lat && lng ? 14 : 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      if (lat && lng) {
+        L.marker([lat, lng]).addTo(map).bindPopup('My Location');
+      }
+    })();
+  }, [mapEl, lat, lng]);
+  return <div ref={setMapEl} style={{ height: 400, border: '1px solid #ddd' }} />;
+}
+// Passenger dashboard components moved to components/PassengerDashboard.jsx to avoid scope collisions
+// (Old DashboardMap removed to avoid duplicate identifiers)
 
 // Generic table to render arrays of objects
 function DataTable({ items }) {
@@ -491,6 +599,8 @@ function SchedulesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [pickup, setPickup] = useState('');
+  const [drop, setDrop] = useState('');
   const [newSchedule, setNewSchedule] = useState({ departureTime: '', busId: '', routeId: '' });
 
   useState(() => { (async () => {
@@ -510,6 +620,17 @@ function SchedulesPage() {
     setItems(Array.isArray(data) ? data : (data?.content ?? []));
   };
 
+  const onSearch = async () => {
+    setError('');
+    try {
+      const data = await searchSchedules(pickup, drop);
+      setItems(data || []);
+      setLoading(false);
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Search failed');
+    }
+  };
+
   const handleScheduleChange = (id, field, value) => {
     setItems(prev => prev.map(s => (s.id === id ? { ...s, [field]: value } : s)));
   };
@@ -526,6 +647,11 @@ function SchedulesPage() {
   return (
     <div>
       <h2>Schedules</h2>
+      <div className="form" style={{ marginBottom: '1rem' }}>
+        <input placeholder="Pickup point" value={pickup} onChange={(e) => setPickup(e.target.value)} />
+        <input placeholder="Drop point" value={drop} onChange={(e) => setDrop(e.target.value)} />
+        <button onClick={onSearch}>Search</button>
+      </div>
 
       {isAdmin && (
         <div style={{ marginBottom: '1rem' }}>
@@ -578,49 +704,22 @@ function SchedulesPage() {
                 <div style={{ fontSize: '.9rem', color: '#555' }}>
                   Bus: {s.busNumber || s.bus?.number || 'N/A'} · Route ID: {s.routeId || 'N/A'}
                 </div>
-                {isAdmin && (
-                  <div className="form" style={{ marginTop: '.5rem', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                      <label><strong>Bus ID</strong></label>
-                      <input
-                        value={s.busId || ''}
-                        onChange={(e) => handleScheduleChange(s.id, 'busId', e.target.value)}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                      <label><strong>Departure Time</strong></label>
-                      <input
-                        value={s.departureTime || ''}
-                        onChange={(e) => handleScheduleChange(s.id, 'departureTime', e.target.value)}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                      <label><strong>Route ID</strong></label>
-                      <input
-                        value={s.routeId || ''}
-                        onChange={(e) => handleScheduleChange(s.id, 'routeId', e.target.value)}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                      <button
-                        onClick={async () => {
-                          await updateSchedule(s.id, s);
-                          await refreshSchedules();
-                        }}
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={async () => {
-                          await deleteSchedule(s.id);
-                          await refreshSchedules();
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/* Route details and stops */}
+                <div style={{ marginTop: '.5rem', fontSize: '.9rem', color: '#333' }}>
+                  <div><strong>Start:</strong> {s.origin || s.route?.origin || '—'}</div>
+                  <div><strong>End:</strong> {s.destination || s.route?.destination || '—'}</div>
+                  <details style={{ marginTop: '.25rem' }}>
+                    <summary style={{ cursor: 'pointer' }}>Stops</summary>
+                    <ol style={{ margin: '.5rem 0 0 .75rem' }}>
+                      {[s.stop01, s.stop02, s.stop03, s.stop04, s.stop05, s.stop06, s.stop07, s.stop08, s.stop09, s.stop10]
+                        .filter(Boolean)
+                        .map((st, idx) => (
+                          <li key={idx} style={{ lineHeight: 1.6 }}>{st}</li>
+                        ))}
+                    </ol>
+                  </details>
+                </div>
+                {/* Passenger-only view: no inline edit/delete controls */}
               </div>
             ))}
           </div>
@@ -633,23 +732,37 @@ function SchedulesPage() {
 function ReservationsPage() {
   const [items, setItems] = useState([]);
   const [mine, setMine] = useState([]);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [scheduleId, setScheduleId] = useState('');
   const [passengerName, setPassengerName] = useState('');
   const [passengerEmail, setPassengerEmail] = useState('');
   const [seatNumber, setSeatNumber] = useState(1);
   const [pickupStopId, setPickupStopId] = useState('');
   const [dropStopId, setDropStopId] = useState('');
-  useState(() => { (async () => {
-    setItems(await getReservations());
-    const me = localStorage.getItem('token');
-    if (me) {
-      try { setMine(await getReservationsByUser(me)); } catch {}
-    }
-  try { const who = await whoami(); setIsAdmin(who?.role === 'ADMIN'); } catch {}
-  })(); }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const all = await getReservations();
+        setItems(all || []);
+        const me = localStorage.getItem('token');
+        if (me) {
+          try { setMine(await getReservationsByUser(me)); } catch {}
+        }
+      } catch (e) {
+        setError(e?.response?.data?.message || e?.message || 'Failed to load reservations');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   const onCreate = async (e) => {
     e.preventDefault();
+    setError('');
     try {
       await createReservation({
         scheduleId: Number(scheduleId),
@@ -662,14 +775,16 @@ function ReservationsPage() {
       setItems(await getReservations());
       const me = localStorage.getItem('token');
       if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
-    } catch (err) {
-      alert(
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        'Failed to create reservation'
-      );
+      setScheduleId(''); setPassengerName(''); setPassengerEmail(''); setSeatNumber(1);
+      setPickupStopId(''); setDropStopId('');
+    } catch (e) {
+      setError(e?.response?.data?.message || e?.message || 'Failed to create reservation');
     }
   };
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p style={{ color: 'red' }}>{error}</p>;
+
   return (
     <div>
       <h2>Reservations</h2>
@@ -682,6 +797,7 @@ function ReservationsPage() {
         <input placeholder="Drop Stop ID (optional)" value={dropStopId} onChange={(e) => setDropStopId(e.target.value)} />
         <button type="submit">Create</button>
       </form>
+
       {items && items.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.75rem' }}>
           {items.map((r) => (
@@ -723,16 +839,7 @@ function ReservationsPage() {
       ) : (
         <p style={{ marginTop: '0.75rem' }}>No reservations found.</p>
       )}
-      {isAdmin && (
-        <div style={{ marginTop: '1rem' }}>
-          <h3>Admin: Delete</h3>
-          {items.map((r) => (
-            <div key={r.id} className="form">
-              <button onClick={async () => { await deleteReservation(r.id); setItems(await getReservations()); }}>Delete</button>
-            </div>
-          ))}
-        </div>
-      )}
+
       <h3>My Reservations</h3>
       {mine && mine.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>

@@ -71,4 +71,13 @@ public class ReservationController {
                 .collect(Collectors.toList());
         return ResponseEntity.ok(list);
     }
+
+    @GetMapping("/me")
+    public ResponseEntity<List<ReservationDTO>> myReservations() {
+        List<ReservationDTO> list = reservationService.getReservationsForCurrentUser()
+                .stream()
+                .map(ReservationMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(list);
+    }
 }
