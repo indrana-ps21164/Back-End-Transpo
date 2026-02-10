@@ -41,6 +41,7 @@ export async function getMyReservations() {
 
 // Map API
 export const getMapData = () => client.get('/api/map').then(r => r.data);
+export const getRoutesWithStops = () => client.get('/api/map/routes-with-stops').then(r => r.data);
 
 // Payments
 export const payReservation = (reservationId, method = 'CASH', reference = '') =>
