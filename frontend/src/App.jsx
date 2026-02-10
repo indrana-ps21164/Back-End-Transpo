@@ -28,6 +28,7 @@ const Dashboard = () => (
   <div>
     <h1>Transpo Dashboard</h1>
     <p>Welcome to Transpo. Use the navigation to explore.</p>
+    <DashboardMap />
   </div>
 );
 
@@ -182,6 +183,87 @@ function LiveMap({ lat, lng }) {
   return <div ref={setMapEl} style={{ height: 400, border: '1px solid #ddd' }} />;
 }
 import { whoami } from './api/auth';
+import { getRoutesWithStops } from './api/resources';
+function DashboardMap() {
+  const [mapEl, setMapEl] = useState(null);
+  const [LRef, setLRef] = useState(null);
+  const [routes, setRoutes] = useState([]);
+  const colors = ['#1e88e5', '#43a047', '#e53935', '#8e24aa', '#fb8c00', '#00acc1'];
+
+  // Load data
+  useState(() => { (async () => {
+    try { setRoutes(await getRoutesWithStops()); } catch (e) { console.warn('Map data failed', e); }
+  })(); }, []);
+
+  // Initialize Leaflet map (Google Maps-like)
+  useState(() => { (async () => {
+    if (!mapEl || LRef) return;
+    const id = 'leaflet-css';
+    if (!document.getElementById(id)) {
+      const link = document.createElement('link');
+      link.id = id; link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    const Lmod = await import('leaflet');
+    const L = Lmod.default || Lmod;
+    setLRef(L);
+    const map = L.map(mapEl, { zoomControl: true }).setView([6.9271, 79.8612], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    // Render once data arrives
+    if (routes && routes.length > 0) {
+      const bounds = [];
+      routes.forEach((r, idx) => {
+        const color = colors[idx % colors.length];
+        const latlngs = [];
+        (r.stops || []).forEach((s) => {
+          if (s.latitude != null && s.longitude != null) {
+            const latlng = [s.latitude, s.longitude];
+            latlngs.push(latlng);
+            bounds.push(latlng);
+            const marker = L.marker(latlng).addTo(map);
+            marker.bindPopup(`<b>${s.name || 'Stop'}</b><br/>${latlng[0].toFixed(5)}, ${latlng[1].toFixed(5)}`);
+          }
+        });
+        if (latlngs.length > 1) {
+          L.polyline(latlngs, { color, weight: 4, opacity: 0.9 }).addTo(map);
+        }
+      });
+      if (bounds.length > 0) {
+        const b = L.latLngBounds(bounds);
+        map.fitBounds(b, { padding: [20, 20] });
+      }
+    }
+    // Legend
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = function () {
+      const div = L.DomUtil.create('div', 'legend');
+      div.style.background = 'rgba(255,255,255,0.9)';
+      div.style.padding = '8px 10px';
+      div.style.borderRadius = '6px';
+      div.style.fontSize = '.85rem';
+      div.innerHTML = '<strong>Routes</strong><br/>' +
+        (routes || []).map((r, idx) => {
+          const color = colors[idx % colors.length];
+          return `<span style="display:inline-block;width:12px;height:12px;background:${color};margin-right:6px;border-radius:2px"></span>${r.name || r.origin + ' → ' + r.destination}`;
+        }).join('<br/>');
+      return div;
+    };
+    legend.addTo(map);
+  })(); }, [mapEl, routes]);
+
+  return (
+    <div>
+      <h3>Routes Map</h3>
+      {(!routes || routes.length === 0) && (
+        <p style={{ color: '#666' }}>No routes available.</p>
+      )}
+      <div ref={setMapEl} style={{ height: 420, border: '1px solid #ddd', borderRadius: 8 }} />
+    </div>
+  );
+}
 
 // Generic table to render arrays of objects
 function DataTable({ items }) {
@@ -732,10 +814,158 @@ function SchedulesPage() {
 }
 
 function ReservationsPage() {
+  const [items, setItems] = useState([]);
+  const [mine, setMine] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [scheduleId, setScheduleId] = useState('');
+  const [passengerName, setPassengerName] = useState('');
+  const [passengerEmail, setPassengerEmail] = useState('');
+  const [seatNumber, setSeatNumber] = useState(1);
+  const [pickupStopId, setPickupStopId] = useState('');
+  const [dropStopId, setDropStopId] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const all = await getReservations();
+        setItems(all || []);
+        const me = localStorage.getItem('token');
+        if (me) {
+          try { setMine(await getReservationsByUser(me)); } catch {}
+        }
+      } catch (e) {
+        setError(e?.response?.data?.message || e?.message || 'Failed to load reservations');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const onCreate = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await createReservation({
+        scheduleId: Number(scheduleId),
+        passengerName,
+        passengerEmail,
+        seatNumber: Number(seatNumber),
+        pickupStopId: pickupStopId ? Number(pickupStopId) : undefined,
+        dropStopId: dropStopId ? Number(dropStopId) : undefined,
+      });
+      setItems(await getReservations());
+      const me = localStorage.getItem('token');
+      if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
+      setScheduleId(''); setPassengerName(''); setPassengerEmail(''); setSeatNumber(1);
+      setPickupStopId(''); setDropStopId('');
+    } catch (e) {
+      setError(e?.response?.data?.message || e?.message || 'Failed to create reservation');
+    }
+  };
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p style={{ color: 'red' }}>{error}</p>;
+
   return (
     <div>
       <h2>Reservations</h2>
-      <p>Passenger reservations UI temporarily unavailable.</p>
+      <form onSubmit={onCreate} className="form" style={{ flexWrap: 'wrap' }}>
+        <input placeholder="Schedule ID" value={scheduleId} onChange={(e) => setScheduleId(e.target.value)} />
+        <input placeholder="Passenger Name" value={passengerName} onChange={(e) => setPassengerName(e.target.value)} />
+        <input placeholder="Passenger Email" value={passengerEmail} onChange={(e) => setPassengerEmail(e.target.value)} />
+        <input placeholder="Seat Number" type="number" value={seatNumber} onChange={(e) => setSeatNumber(e.target.value)} />
+        <input placeholder="Pickup Stop ID (optional)" value={pickupStopId} onChange={(e) => setPickupStopId(e.target.value)} />
+        <input placeholder="Drop Stop ID (optional)" value={dropStopId} onChange={(e) => setDropStopId(e.target.value)} />
+        <button type="submit">Create</button>
+      </form>
+
+      {items && items.length > 0 ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.75rem' }}>
+          {items.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                padding: '0.75rem 1rem',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                background: '#fff',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <strong>Reservation #{r.id}</strong>
+                <span style={{ fontSize: '.8rem', color: '#666' }}>
+                  Seat {r.seatNumber}
+                </span>
+              </div>
+              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
+                <div><strong>Schedule ID:</strong> {r.scheduleId}</div>
+                <div><strong>Name:</strong> {r.passengerName}</div>
+                <div><strong>Email:</strong> {r.passengerEmail}</div>
+                {r.pickupStopId && (
+                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
+                )}
+                {r.dropStopId && (
+                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
+                )}
+                {r.bookingTime && (
+                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
+                    Booked at: {String(r.bookingTime).replace('T', ' ')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style={{ marginTop: '0.75rem' }}>No reservations found.</p>
+      )}
+
+      <h3>My Reservations</h3>
+      {mine && mine.length > 0 ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
+          {mine.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                padding: '0.75rem 1rem',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                background: '#fafafa',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <strong>Reservation #{r.id}</strong>
+                <span style={{ fontSize: '.8rem', color: '#666' }}>
+                  Seat {r.seatNumber}
+                </span>
+              </div>
+              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
+                <div><strong>Schedule:</strong> {r.scheduleId}</div>
+                <div><strong>Name:</strong> {r.passengerName}</div>
+                <div><strong>Email:</strong> {r.passengerEmail}</div>
+                {r.pickupStopId && (
+                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
+                )}
+                {r.dropStopId && (
+                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
+                )}
+                {r.bookingTime && (
+                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
+                    Booked at: {String(r.bookingTime).replace('T', ' ')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p>No Reservations</p>
+      )}
     </div>
   );
 }
