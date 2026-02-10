@@ -72,6 +72,7 @@ import {
   deleteReservation,
   getMapData,
   getReservationsByUser,
+  searchSchedules,
 } from './api/resources';
 // Driver dashboard with live map
 function DriverDashboard() {
@@ -600,6 +601,8 @@ function SchedulesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [pickup, setPickup] = useState('');
+  const [drop, setDrop] = useState('');
   const [newSchedule, setNewSchedule] = useState({ departureTime: '', busId: '', routeId: '' });
 
   useState(() => { (async () => {
@@ -619,6 +622,17 @@ function SchedulesPage() {
     setItems(Array.isArray(data) ? data : (data?.content ?? []));
   };
 
+  const onSearch = async () => {
+    setError('');
+    try {
+      const data = await searchSchedules(pickup, drop);
+      setItems(data || []);
+      setLoading(false);
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Search failed');
+    }
+  };
+
   const handleScheduleChange = (id, field, value) => {
     setItems(prev => prev.map(s => (s.id === id ? { ...s, [field]: value } : s)));
   };
@@ -635,6 +649,11 @@ function SchedulesPage() {
   return (
     <div>
       <h2>Schedules</h2>
+      <div className="form" style={{ marginBottom: '1rem' }}>
+        <input placeholder="Pickup point" value={pickup} onChange={(e) => setPickup(e.target.value)} />
+        <input placeholder="Drop point" value={drop} onChange={(e) => setDrop(e.target.value)} />
+        <button onClick={onSearch}>Search</button>
+      </div>
 
       {isAdmin && (
         <div style={{ marginBottom: '1rem' }}>
@@ -687,49 +706,22 @@ function SchedulesPage() {
                 <div style={{ fontSize: '.9rem', color: '#555' }}>
                   Bus: {s.busNumber || s.bus?.number || 'N/A'} · Route ID: {s.routeId || 'N/A'}
                 </div>
-                {isAdmin && (
-                  <div className="form" style={{ marginTop: '.5rem', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                      <label><strong>Bus ID</strong></label>
-                      <input
-                        value={s.busId || ''}
-                        onChange={(e) => handleScheduleChange(s.id, 'busId', e.target.value)}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                      <label><strong>Departure Time</strong></label>
-                      <input
-                        value={s.departureTime || ''}
-                        onChange={(e) => handleScheduleChange(s.id, 'departureTime', e.target.value)}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                      <label><strong>Route ID</strong></label>
-                      <input
-                        value={s.routeId || ''}
-                        onChange={(e) => handleScheduleChange(s.id, 'routeId', e.target.value)}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                      <button
-                        onClick={async () => {
-                          await updateSchedule(s.id, s);
-                          await refreshSchedules();
-                        }}
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={async () => {
-                          await deleteSchedule(s.id);
-                          await refreshSchedules();
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/* Route details and stops */}
+                <div style={{ marginTop: '.5rem', fontSize: '.9rem', color: '#333' }}>
+                  <div><strong>Start:</strong> {s.origin || s.route?.origin || '—'}</div>
+                  <div><strong>End:</strong> {s.destination || s.route?.destination || '—'}</div>
+                  <details style={{ marginTop: '.25rem' }}>
+                    <summary style={{ cursor: 'pointer' }}>Stops</summary>
+                    <ol style={{ margin: '.5rem 0 0 .75rem' }}>
+                      {[s.stop01, s.stop02, s.stop03, s.stop04, s.stop05, s.stop06, s.stop07, s.stop08, s.stop09, s.stop10]
+                        .filter(Boolean)
+                        .map((st, idx) => (
+                          <li key={idx} style={{ lineHeight: 1.6 }}>{st}</li>
+                        ))}
+                    </ol>
+                  </details>
+                </div>
+                {/* Passenger-only view: no inline edit/delete controls */}
               </div>
             ))}
           </div>
@@ -740,180 +732,10 @@ function SchedulesPage() {
 }
 
 function ReservationsPage() {
-  const [items, setItems] = useState([]);
-  const [mine, setMine] = useState([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [scheduleId, setScheduleId] = useState('');
-  const [passengerName, setPassengerName] = useState('');
-  const [passengerEmail, setPassengerEmail] = useState('');
-  const [seatNumber, setSeatNumber] = useState(1);
-  const [pickupStopId, setPickupStopId] = useState('');
-  const [dropStopId, setDropStopId] = useState('');
-  useState(() => { (async () => {
-    setItems(await getReservations());
-    const me = localStorage.getItem('token');
-    if (me) {
-      try { setMine(await getReservationsByUser(me)); } catch {}
-    }
-  try { const who = await whoami(); setIsAdmin(who?.role === 'ADMIN'); } catch {}
-  })(); }, []);
-  const onCreate = async (e) => {
-    e.preventDefault();
-    try {
-      await createReservation({
-        scheduleId: Number(scheduleId),
-        passengerName,
-        passengerEmail,
-        seatNumber: Number(seatNumber),
-        pickupStopId: pickupStopId ? Number(pickupStopId) : undefined,
-        dropStopId: dropStopId ? Number(dropStopId) : undefined,
-      });
-      setItems(await getReservations());
-      const me = localStorage.getItem('token');
-      if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
-    } catch (err) {
-      alert(
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        'Failed to create reservation'
-      );
-    }
-  };
   return (
     <div>
       <h2>Reservations</h2>
-      <form onSubmit={onCreate} className="form" style={{ flexWrap: 'wrap' }}>
-        <input placeholder="Schedule ID" value={scheduleId} onChange={(e) => setScheduleId(e.target.value)} />
-        <input placeholder="Passenger Name" value={passengerName} onChange={(e) => setPassengerName(e.target.value)} />
-        <input placeholder="Passenger Email" value={passengerEmail} onChange={(e) => setPassengerEmail(e.target.value)} />
-        <input placeholder="Seat Number" type="number" value={seatNumber} onChange={(e) => setSeatNumber(e.target.value)} />
-        <input placeholder="Pickup Stop ID (optional)" value={pickupStopId} onChange={(e) => setPickupStopId(e.target.value)} />
-        <input placeholder="Drop Stop ID (optional)" value={dropStopId} onChange={(e) => setDropStopId(e.target.value)} />
-        <button type="submit">Create</button>
-      </form>
-      {items && items.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.75rem' }}>
-          {items.map((r) => (
-            <div
-              key={r.id}
-              style={{
-                border: '1px solid #ddd',
-                borderRadius: 8,
-                padding: '0.75rem 1rem',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                background: '#fff',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                <strong>Reservation #{r.id}</strong>
-                <span style={{ fontSize: '.8rem', color: '#666' }}>
-                  Seat {r.seatNumber}
-                </span>
-              </div>
-              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
-                <div><strong>Schedule ID:</strong> {r.scheduleId}</div>
-                <div><strong>Name:</strong> {r.passengerName}</div>
-                <div><strong>Email:</strong> {r.passengerEmail}</div>
-                {r.pickupStopId && (
-                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
-                )}
-                {r.dropStopId && (
-                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
-                )}
-                {r.bookingTime && (
-                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
-                    Booked at: {String(r.bookingTime).replace('T', ' ')}
-                  </div>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem' }}>
-                {r.paid ? (
-                  <span style={{ color: 'green' }}>Paid ({r.paymentMethod || '—'})</span>
-                ) : (
-                  <button onClick={async () => {
-                    try {
-                      await payReservation(r.id, 'CASH');
-                      setItems(await getReservations());
-                      const me = localStorage.getItem('token');
-                      if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
-                    } catch (e) {
-                      alert('Payment failed');
-                    }
-                  }}>Pay</button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p style={{ marginTop: '0.75rem' }}>No reservations found.</p>
-      )}
-      {isAdmin && (
-        <div style={{ marginTop: '1rem' }}>
-          <h3>Admin: Delete</h3>
-          {items.map((r) => (
-            <div key={r.id} className="form">
-              <button onClick={async () => { await deleteReservation(r.id); setItems(await getReservations()); }}>Delete</button>
-            </div>
-          ))}
-        </div>
-      )}
-      <h3>My Reservations</h3>
-      {mine && mine.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
-          {mine.map((r) => (
-            <div
-              key={r.id}
-              style={{
-                border: '1px solid #ddd',
-                borderRadius: 8,
-                padding: '0.75rem 1rem',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                background: '#fafafa',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                <strong>Reservation #{r.id}</strong>
-                <span style={{ fontSize: '.8rem', color: '#666' }}>
-                  Seat {r.seatNumber}
-                </span>
-              </div>
-              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
-                <div><strong>Schedule:</strong> {r.scheduleId}</div>
-                <div><strong>Name:</strong> {r.passengerName}</div>
-                <div><strong>Email:</strong> {r.passengerEmail}</div>
-                {r.pickupStopId && (
-                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
-                )}
-                {r.dropStopId && (
-                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
-                )}
-                {r.bookingTime && (
-                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
-                    Booked at: {String(r.bookingTime).replace('T', ' ')}
-                  </div>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem' }}>
-                {r.paid ? (
-                  <span style={{ color: 'green' }}>Paid ({r.paymentMethod || '—'})</span>
-                ) : (
-                  <button onClick={async () => {
-                    try {
-                      await payReservation(r.id, 'CASH');
-                      setMine(await getReservationsByUser(localStorage.getItem('token') || ''));
-                    } catch (e) {
-                      alert('Payment failed');
-                    }
-                  }}>Pay</button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p>No Reservations</p>
-      )}
+      <p>Passenger reservations UI temporarily unavailable.</p>
     </div>
   );
 }

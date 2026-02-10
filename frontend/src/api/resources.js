@@ -18,6 +18,10 @@ export const createSchedule = (schedule) => client.post('/api/schedules', schedu
 export const updateSchedule = (id, schedule) => client.put(`/api/schedules/${id}`, schedule).then(r => r.data);
 export const deleteSchedule = (id) => client.delete(`/api/schedules/${id}`).then(r => r.data);
 
+// Schedule search for Passenger
+export const searchSchedules = (pickup, drop) =>
+	client.get('/api/schedules/search', { params: { pickup, drop } }).then(r => r.data);
+
 // Reservation APIs
 export const getReservations = () => client.get('/api/reservations').then(r => r.data);
 // payload must include: scheduleId, passengerName, passengerEmail, seatNumber, optional pickupStopId, dropStopId
