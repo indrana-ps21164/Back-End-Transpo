@@ -21,13 +21,25 @@ export const deleteSchedule = (id) => client.delete(`/api/schedules/${id}`).then
 // Reservation APIs
 export const getReservations = () => client.get('/api/reservations').then(r => r.data);
 // payload must include: scheduleId, passengerName, passengerEmail, seatNumber, optional pickupStopId, dropStopId
-export const createReservation = (payload) => client.post('/api/reservations/book', payload).then(r => r.data);
-export const updateReservation = (id, payload) => client.put(`/api/reservations/${id}`, payload).then(r => r.data);
-export const deleteReservation = (id) => client.delete(`/api/reservations/${id}`).then(r => r.data);
+export const createReservation = (payload) =>
+	client.post('/api/reservations/book', payload);
+
+export const getReservationsByUser = (email) =>
+	client.get('/api/reservations/by-email', { params: { email } }).then(r => r.data);
+
+export const deleteReservation = (id) =>
+	client.delete(`/api/reservations/${id}`).then(r => r.data);
+
+export async function getMyReservations() {
+  const res = await fetch('/api/reservations/me', {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('Failed to load reservations');
+  return res.json();
+}
 
 // Map API
 export const getMapData = () => client.get('/api/map').then(r => r.data);
-
-// User reservations API
-export const getReservationsByUser = (usernameOrEmail) =>
-	client.get('/api/reservations/by-email', { params: { email: usernameOrEmail } }).then(r => r.data);

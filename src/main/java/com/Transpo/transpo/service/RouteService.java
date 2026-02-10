@@ -32,6 +32,16 @@ public class RouteService {
         return repo.findById(id).map(r -> {
             r.setOrigin(updated.getOrigin());
             r.setDestination(updated.getDestination());
+             r.setStop01(updated.getStop01());
+        r.setStop02(updated.getStop02());
+        r.setStop03(updated.getStop03());
+        r.setStop04(updated.getStop04());
+        r.setStop05(updated.getStop05());
+        r.setStop06(updated.getStop06());
+        r.setStop07(updated.getStop07());
+        r.setStop08(updated.getStop08());
+        r.setStop09(updated.getStop09());
+        r.setStop10(updated.getStop10());
             return repo.save(r);
         }).orElseThrow(() -> new RuntimeException("Route not found"));
     }

@@ -17,22 +17,29 @@ public class ScheduleController {
 
     private final ScheduleService service;
     private final com.Transpo.transpo.repository.ScheduleRepository scheduleRepository;
+    private final ScheduleMapper scheduleMapper;
 
-    public ScheduleController(ScheduleService service, 
-                            com.Transpo.transpo.repository.ScheduleRepository scheduleRepository) {
+    public ScheduleController(
+            ScheduleService service,
+            com.Transpo.transpo.repository.ScheduleRepository scheduleRepository,
+            ScheduleMapper scheduleMapper
+    ) {
         this.service = service;
         this.scheduleRepository = scheduleRepository;
+        this.scheduleMapper = scheduleMapper;
     }
 
     @PostMapping
-    public ResponseEntity<ScheduleResponseDTO> create(@RequestBody Schedule s) {
-        Schedule saved = service.create(s);
-        
-        // Use the custom query to get full details
-        ScheduleResponseDTO dto = scheduleRepository.findScheduleDetailsById(saved.getId())
+    public ResponseEntity<ScheduleResponseDTO> create(@RequestBody ScheduleDTO dto) {
+        // Map incoming DTO (with busId, routeId, departureTime, etc.) to entity
+        Schedule toSave = scheduleMapper.toEntity(dto);
+        Schedule saved = service.create(toSave);
+
+        // Use the custom query to get full details for response
+        ScheduleResponseDTO response = scheduleRepository.findScheduleDetailsById(saved.getId())
                 .orElseThrow(() -> new RuntimeException("Schedule not found"));
-        
-        return ResponseEntity.ok(dto);
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping
@@ -46,11 +53,11 @@ public class ScheduleController {
     public ResponseEntity<ScheduleResponseDTO> get(@PathVariable Long id) {
         ScheduleResponseDTO dto = scheduleRepository.findScheduleDetailsById(id)
                 .orElse(null);
-        
+
         if (dto == null) {
             return ResponseEntity.notFound().build();
         }
-        
+
         return ResponseEntity.ok(dto);
     }
 

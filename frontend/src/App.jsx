@@ -573,13 +573,20 @@ function SchedulesPage() {
               <div key={s.id} style={{ borderTop: '1px dashed #eee', padding: '.5rem 0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <strong>{s.departureTime || s.time || '—'}</strong>
-                  <span>{s.arrivalTime ? `→ ${s.arrivalTime}` : ''}</span>
+                  <span>ID: {s.id}</span>
                 </div>
                 <div style={{ fontSize: '.9rem', color: '#555' }}>
-                  Bus: {s.busNumber || s.bus?.number || 'N/A'} · Stop: {s.stopName || s.stop?.name || 'N/A'}
+                  Bus: {s.busNumber || s.bus?.number || 'N/A'} · Route ID: {s.routeId || 'N/A'}
                 </div>
                 {isAdmin && (
                   <div className="form" style={{ marginTop: '.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
+                      <label><strong>Bus ID</strong></label>
+                      <input
+                        value={s.busId || ''}
+                        onChange={(e) => handleScheduleChange(s.id, 'busId', e.target.value)}
+                      />
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
                       <label><strong>Departure Time</strong></label>
                       <input
@@ -588,10 +595,10 @@ function SchedulesPage() {
                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', marginRight: '0.5rem' }}>
-                      <label><strong>Arrival Time (display only)</strong></label>
+                      <label><strong>Route ID</strong></label>
                       <input
-                        value={s.arrivalTime || ''}
-                        onChange={(e) => handleScheduleChange(s.id, 'arrivalTime', e.target.value)}
+                        value={s.routeId || ''}
+                        onChange={(e) => handleScheduleChange(s.id, 'routeId', e.target.value)}
                       />
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
@@ -643,17 +650,25 @@ function ReservationsPage() {
   })(); }, []);
   const onCreate = async (e) => {
     e.preventDefault();
-    await createReservation({
-      scheduleId: Number(scheduleId),
-      passengerName,
-      passengerEmail,
-      seatNumber: Number(seatNumber),
-      pickupStopId: pickupStopId ? Number(pickupStopId) : undefined,
-      dropStopId: dropStopId ? Number(dropStopId) : undefined,
-    });
-    setItems(await getReservations());
-    const me = localStorage.getItem('token');
-    if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
+    try {
+      await createReservation({
+        scheduleId: Number(scheduleId),
+        passengerName,
+        passengerEmail,
+        seatNumber: Number(seatNumber),
+        pickupStopId: pickupStopId ? Number(pickupStopId) : undefined,
+        dropStopId: dropStopId ? Number(dropStopId) : undefined,
+      });
+      setItems(await getReservations());
+      const me = localStorage.getItem('token');
+      if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
+    } catch (err) {
+      alert(
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        'Failed to create reservation'
+      );
+    }
   };
   return (
     <div>
@@ -667,9 +682,47 @@ function ReservationsPage() {
         <input placeholder="Drop Stop ID (optional)" value={dropStopId} onChange={(e) => setDropStopId(e.target.value)} />
         <button type="submit">Create</button>
       </form>
-      <ul>
-        {items.map((r) => (<li key={r.id}>{r.status || JSON.stringify(r)}</li>))}
-      </ul>
+      {items && items.length > 0 ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.75rem' }}>
+          {items.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                padding: '0.75rem 1rem',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                background: '#fff',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <strong>Reservation #{r.id}</strong>
+                <span style={{ fontSize: '.8rem', color: '#666' }}>
+                  Seat {r.seatNumber}
+                </span>
+              </div>
+              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
+                <div><strong>Schedule ID:</strong> {r.scheduleId}</div>
+                <div><strong>Name:</strong> {r.passengerName}</div>
+                <div><strong>Email:</strong> {r.passengerEmail}</div>
+                {r.pickupStopId && (
+                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
+                )}
+                {r.dropStopId && (
+                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
+                )}
+                {r.bookingTime && (
+                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
+                    Booked at: {String(r.bookingTime).replace('T', ' ')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style={{ marginTop: '0.75rem' }}>No reservations found.</p>
+      )}
       {isAdmin && (
         <div style={{ marginTop: '1rem' }}>
           <h3>Admin: Delete</h3>
@@ -682,7 +735,43 @@ function ReservationsPage() {
       )}
       <h3>My Reservations</h3>
       {mine && mine.length > 0 ? (
-        <DataTable items={mine} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
+          {mine.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                padding: '0.75rem 1rem',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                background: '#fafafa',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <strong>Reservation #{r.id}</strong>
+                <span style={{ fontSize: '.8rem', color: '#666' }}>
+                  Seat {r.seatNumber}
+                </span>
+              </div>
+              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
+                <div><strong>Schedule:</strong> {r.scheduleId}</div>
+                <div><strong>Name:</strong> {r.passengerName}</div>
+                <div><strong>Email:</strong> {r.passengerEmail}</div>
+                {r.pickupStopId && (
+                  <div><strong>Pickup Stop:</strong> {r.pickupStopId}</div>
+                )}
+                {r.dropStopId && (
+                  <div><strong>Drop Stop:</strong> {r.dropStopId}</div>
+                )}
+                {r.bookingTime && (
+                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
+                    Booked at: {String(r.bookingTime).replace('T', ' ')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <p>No Reservations</p>
       )}

@@ -62,4 +62,13 @@ public class ReservationController {
         reservationService.cancelReservation(id);
         return ResponseEntity.ok(Map.of("message", "Reservation cancelled successfully"));
     }
+
+    @GetMapping
+    public ResponseEntity<List<ReservationDTO>> list() {
+        List<ReservationDTO> list = reservationService.getAllReservations()
+                .stream()
+                .map(ReservationMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(list);
+    }
 }
