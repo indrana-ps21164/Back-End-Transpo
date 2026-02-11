@@ -10,6 +10,7 @@ const Layout = ({ children }) => {
   const [me, setMe] = useState(null);
   useEffect(() => { (async () => { try { setMe(await whoami()); } catch {} })(); }, []);
   const isAdmin = me?.role === 'ADMIN';
+  const isConductor = me?.role === 'CONDUCTOR';
   return (
     <div className="container">
       <nav className="nav">
@@ -20,6 +21,7 @@ const Layout = ({ children }) => {
         <Link to="/schedules">Schedules</Link>
         <Link to="/reservations">Reservations</Link>
         <Link to="/driver">Driver</Link>
+  {isConductor && <Link to="/conductor">Seat Availability</Link>}
         <Link to="/login" style={{ marginLeft: 'auto' }}>Login</Link>
       </nav>
       <main>{children}</main>
@@ -33,6 +35,7 @@ const RequireAuth = ({ children }) => {
 };
 
 import PassengerDashboard from './components/PassengerDashboard';
+import ConductorDashboard from './components/ConductorDashboard';
 const Dashboard = () => (
   <PassengerDashboard />
 );
@@ -52,6 +55,7 @@ export default function App() {
           <Route path="/map" element={<RequireAuth><MapPage /></RequireAuth>} />
           <Route path="/driver" element={<RequireAuth><DriverDashboard /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
+          <Route path="/conductor" element={<RequireAuth><ConductorDashboard /></RequireAuth>} />
         </Routes>
       </Layout>
     </BrowserRouter>

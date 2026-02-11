@@ -18,6 +18,31 @@ export const createSchedule = (schedule) => client.post('/api/schedules', schedu
 export const updateSchedule = (id, schedule) => client.put(`/api/schedules/${id}`, schedule).then(r => r.data);
 export const deleteSchedule = (id) => client.delete(`/api/schedules/${id}`).then(r => r.data);
 
+// Assignments: drivers and conductors with their assigned bus
+// These endpoints are assumed; adjust paths to your backend if different.
+export async function getDriversWithAssignments() {
+	const res = await client.get('/api/admin/drivers');
+	return res.data; // expected [{ username, assignedBusId, assignedBusNumber, assignedBusName }]
+}
+
+export async function getConductorsWithAssignments() {
+	const res = await client.get('/api/admin/conductors');
+	return res.data; // expected [{ username, assignedBusId, assignedBusNumber, assignedBusName }]
+}
+
+// Duplicate removed: use the existing exported changeDriverBus below under Driver APIs
+
+// Admin: driver assignment endpoint
+export const adminUpdateDriverAssignment = (payload) =>
+	client.post('/api/admin/driver-assignment', payload).then(r => r.data);
+
+// Admin: buses enriched with driver/conductor assignments
+export const getAdminBuses = () => client.get('/api/admin/buses').then(r => r.data);
+
+export async function updateConductorAssignment(username, busId) {
+	const res = await client.put(`/api/admin/conductor-assignment`, { username, busId });
+	return res.data;
+}
 // Schedule search for Passenger
 export const searchSchedules = (pickup, drop) =>
 	client.get('/api/schedules/search', { params: { pickup, drop } }).then(r => r.data);
