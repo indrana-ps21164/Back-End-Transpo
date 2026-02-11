@@ -39,6 +39,13 @@ export const adminUpdateDriverAssignment = (payload) =>
 // Admin: buses enriched with driver/conductor assignments
 export const getAdminBuses = () => client.get('/api/admin/buses').then(r => r.data);
 
+// Admin: remove assignments
+export const adminRemoveDriverAssignment = ({ userId, username }) =>
+	client.delete('/api/admin/driver-assignment', { params: { userId, username } }).then(r => r.data);
+
+export const adminRemoveConductorAssignment = ({ userId, username }) =>
+	client.delete('/api/admin/conductor-assignment', { params: { userId, username } }).then(r => r.data);
+
 export async function updateConductorAssignment(username, busId) {
 	const res = await client.put(`/api/admin/conductor-assignment`, { username, busId });
 	return res.data;

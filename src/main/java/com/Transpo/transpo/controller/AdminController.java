@@ -102,6 +102,27 @@ public class AdminController {
         return ResponseEntity.ok(dto);
     }
 
+    // Remove driver assignment from bus
+    @DeleteMapping("/driver-assignment")
+    public ResponseEntity<?> removeDriverAssignment(@RequestParam(required = false) Long userId,
+                                                    @RequestParam(required = false) String username) {
+        User driver;
+        if (userId != null) {
+            driver = userRepository.findById(userId).orElse(null);
+        } else if (username != null && !username.isBlank()) {
+            driver = userRepository.findByUsername(username).orElse(null);
+        } else {
+            return ResponseEntity.badRequest().body(Map.of("message", "userId or username required"));
+        }
+        if (driver == null) {
+            return ResponseEntity.status(404).body(Map.of("message", "Driver not found"));
+        }
+        driverAssignmentRepository.findByDriverId(driver.getId()).ifPresent(da -> {
+            driverAssignmentRepository.delete(da);
+        });
+        return ResponseEntity.ok(Map.of("message", "Driver unassigned from bus"));
+    }
+
     // --- Conductor assignment endpoints ---
     @PostMapping("/conductor-assignment")
     public ResponseEntity<?> createOrUpdateConductorAssignment(@RequestBody Map<String, Object> payload) {
@@ -158,6 +179,27 @@ public class AdminController {
                 "busId", bus.getId(),
                 "busNumber", bus.getBusNumber()
         ));
+    }
+
+    // Remove conductor assignment from bus
+    @DeleteMapping("/conductor-assignment")
+    public ResponseEntity<?> removeConductorAssignment(@RequestParam(required = false) Long userId,
+                                                       @RequestParam(required = false) String username) {
+        User conductor;
+        if (userId != null) {
+            conductor = userRepository.findById(userId).orElse(null);
+        } else if (username != null && !username.isBlank()) {
+            conductor = userRepository.findByUsername(username).orElse(null);
+        } else {
+            return ResponseEntity.badRequest().body(Map.of("message", "userId or username required"));
+        }
+        if (conductor == null) {
+            return ResponseEntity.status(404).body(Map.of("message", "Conductor not found"));
+        }
+        conductorAssignmentRepository.findByConductorId(conductor.getId()).ifPresent(ca -> {
+            conductorAssignmentRepository.delete(ca);
+        });
+        return ResponseEntity.ok(Map.of("message", "Conductor unassigned from bus"));
     }
 
     // List drivers with assignments

@@ -4,7 +4,6 @@ import {
   getBuses, createBus, updateBus, deleteBus,
   getRoutes, createRoute, updateRoute, deleteRoute,
   getSchedules, createSchedule, updateSchedule, deleteSchedule,
-  getDriversWithAssignments, getConductorsWithAssignments,
   adminUpdateDriverAssignment, updateConductorAssignment,
   getAdminBuses,
 } from '../api/resources';
@@ -87,70 +86,43 @@ function BusManager() {
 }
 
 function AssignmentManager() {
-  const [drivers, setDrivers] = useState([]);
-  const [conductors, setConductors] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [driverForm, setDriverForm] = useState({ username: '', busId: '' });
   const [conductorForm, setConductorForm] = useState({ username: '', busId: '' });
   const [conductorUpdateAvailable, setConductorUpdateAvailable] = useState(true);
+  const [busNumberFilter, setBusNumberFilter] = useState('');
+  const [currentDriver, setCurrentDriver] = useState('');
+  const [currentConductor, setCurrentConductor] = useState('');
 
-  // Fetch lists; replace with real API calls if available in resources.js
-  useEffect(() => {
-    (async () => {
-      try {
-        setError('');
-        const [drv, con] = await Promise.allSettled([
-          getDriversWithAssignments(),
-          getConductorsWithAssignments(),
-        ]);
-        if (drv.status === 'fulfilled') {
-          const val = drv.value;
-          setDrivers(Array.isArray(val) ? val : []);
-        } else {
-          setDrivers([]);
-        }
-        if (con.status === 'fulfilled') {
-          const val = con.value;
-          setConductors(Array.isArray(val) ? val : []);
-        } else {
-          setConductors([]);
-        }
-      } catch (e) {
-        setError(e?.response?.data?.message || 'Failed to load assignments');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const refreshLists = async () => {
+  // Load current driver/conductor by bus number
+  const loadAssignmentsForBus = async () => {
     setLoading(true);
-    setError('');
+    setError(''); setSuccess('');
+    setCurrentDriver(''); setCurrentConductor('');
     try {
-      const [drv, con] = await Promise.allSettled([
-        getDriversWithAssignments(),
-        getConductorsWithAssignments(),
-      ]);
-      if (drv.status === 'fulfilled') {
-        const val = drv.value;
-        setDrivers(Array.isArray(val) ? val : []);
+      const buses = await getAdminBuses();
+      const match = (Array.isArray(buses) ? buses : []).find(b => String(b.busNumber).trim().toLowerCase() === String(busNumberFilter).trim().toLowerCase());
+      if (!match) {
+        setError('Bus not found');
       } else {
-        setDrivers([]);
-      }
-      if (con.status === 'fulfilled') {
-        const val = con.value;
-        setConductors(Array.isArray(val) ? val : []);
-      } else {
-        setConductors([]);
+        setCurrentDriver(match.driverUsername || 'Not Assigned');
+        setCurrentConductor(match.conductorUsername || 'Not Assigned');
+        // Prefill busId for forms if needed (requires id)
+        if (match.id) {
+          setDriverForm(prev => ({ ...prev, busId: String(match.id) }));
+          setConductorForm(prev => ({ ...prev, busId: String(match.id) }));
+        }
       }
     } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to refresh assignments');
+      setError(e?.response?.data?.message || 'Failed to load bus assignments');
     } finally {
       setLoading(false);
     }
   };
+
+  const refreshLists = async () => { await loadAssignmentsForBus(); };
 
   const handleChangeDriverBus = async () => {
     setError(''); setSuccess('');
@@ -169,6 +141,17 @@ function AssignmentManager() {
       } else {
         setError(e?.response?.data?.message || 'Failed to update driver assignment');
       }
+    }
+  };
+
+  const handleRemoveDriver = async (username) => {
+    setError(''); setSuccess('');
+    try {
+      await adminRemoveDriverAssignment({ username });
+      setSuccess('Driver unassigned from bus');
+      await refreshLists();
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to unassign driver');
     }
   };
 
@@ -191,14 +174,37 @@ function AssignmentManager() {
     }
   };
 
+  const handleRemoveConductor = async (username) => {
+    setError(''); setSuccess('');
+    try {
+      await adminRemoveConductorAssignment({ username });
+      setSuccess('Conductor unassigned from bus');
+      await refreshLists();
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to unassign conductor');
+    }
+  };
+
   return (
     <div>
       <h2>Assignments</h2>
       {loading && <p>Loading assignments...</p>}
       {error && <p style={{ color: 'red' }}>{error}</p>}
       {success && <p style={{ color: 'green' }}>{success}</p>}
-      <div style={{ marginBottom: '.5rem' }}>
-        <button onClick={refreshLists}>Refresh Lists</button>
+      <div className="form" style={{ gap: '.5rem', marginBottom: '.75rem' }}>
+        <input placeholder="Filter by Bus Number" value={busNumberFilter} onChange={(e) => setBusNumberFilter(e.target.value)} />
+        <button onClick={loadAssignmentsForBus}>Load Assignments</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'start', marginBottom: '1rem' }}>
+        <div>
+          <h3>Current Driver</h3>
+          <p style={{ marginTop: '.25rem' }}>{currentDriver || '—'}</p>
+        </div>
+        <div>
+          <h3>Current Conductor</h3>
+          <p style={{ marginTop: '.25rem' }}>{currentConductor || '—'}</p>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'start' }}>
@@ -209,18 +215,7 @@ function AssignmentManager() {
             <input type="number" placeholder="Bus ID" value={driverForm.busId} onChange={(e) => setDriverForm({ ...driverForm, busId: e.target.value })} />
             <button onClick={handleChangeDriverBus}>Change Driver Bus</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem' }}>
-            {drivers && drivers.length > 0 ? drivers.map((d) => (
-              <div key={d.username} style={{ border: '1px solid #ddd', borderRadius: 8, padding: '.75rem', cursor: 'pointer' }}
-                   onClick={() => setDriverForm({ ...driverForm, username: d.username })}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <strong>{d.username}</strong>
-                  <span style={{ fontSize: '.8rem', color: '#666' }}>{d.assignedBusNumber || d.assignedBusName || '—'}</span>
-                </div>
-                <div style={{ fontSize: '.85rem', color: '#555' }}>Assigned Bus: {d.assignedBusNumber || d.assignedBusName || 'None'}</div>
-              </div>
-            )) : <p>No drivers found</p>}
-          </div>
+          {/* List removed per request */}
         </div>
 
         <div>
@@ -233,18 +228,7 @@ function AssignmentManager() {
               <span style={{ color: '#b00', fontSize: '.85rem' }}>No assignment API available.</span>
             )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem' }}>
-            {conductors && conductors.length > 0 ? conductors.map((c) => (
-              <div key={c.username} style={{ border: '1px solid #ddd', borderRadius: 8, padding: '.75rem', cursor: 'pointer' }}
-                   onClick={() => setConductorForm({ ...conductorForm, username: c.username })}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <strong>{c.username}</strong>
-                  <span style={{ fontSize: '.8rem', color: '#666' }}>{c.assignedBusNumber || c.assignedBusName || '—'}</span>
-                </div>
-                <div style={{ fontSize: '.85rem', color: '#555' }}>Assigned Bus: {c.assignedBusNumber || c.assignedBusName || 'None'}</div>
-              </div>
-            )) : <p>No conductors found</p>}
-          </div>
+          {/* List removed per request */}
         </div>
       </div>
     </div>
