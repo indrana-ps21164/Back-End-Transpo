@@ -79,18 +79,13 @@ public class AdminController {
             return ResponseEntity.status(404).body(Map.of("message", "Bus not found"));
         }
 
-        // Ensure bus isn't already assigned to another driver
-        driverAssignmentRepository.findByBusId(busId).ifPresent(existing -> {
-            if (!existing.getDriver().getId().equals(driver.getId())) {
-                throw new BadRequestException("Bus is already assigned to another driver");
-            }
-        });
+    // Admin override: clear any existing assignments for this bus and driver, then set new assignment
+    driverAssignmentRepository.findByBusId(busId).ifPresent(driverAssignmentRepository::delete);
+    driverAssignmentRepository.findByDriverId(driver.getId()).ifPresent(driverAssignmentRepository::delete);
 
-        DriverAssignment assignment = driverAssignmentRepository.findByDriverId(driver.getId())
-                .orElse(new DriverAssignment(driver, bus));
-        assignment.setBus(bus);
-        assignment.setAssignedAt(LocalDateTime.now());
-        driverAssignmentRepository.save(assignment);
+    DriverAssignment assignment = new DriverAssignment(driver, bus);
+    assignment.setAssignedAt(LocalDateTime.now());
+    driverAssignmentRepository.save(assignment);
 
         DriverAssignmentDTO dto = new DriverAssignmentDTO();
         dto.setId(assignment.getId());

@@ -95,6 +95,8 @@ function AssignmentManager() {
   const [busNumberFilter, setBusNumberFilter] = useState('');
   const [currentDriver, setCurrentDriver] = useState('');
   const [currentConductor, setCurrentConductor] = useState('');
+  const [editDriver, setEditDriver] = useState('');
+  const [editConductor, setEditConductor] = useState('');
 
   // Load current driver/conductor by bus number
   const loadAssignmentsForBus = async () => {
@@ -109,6 +111,8 @@ function AssignmentManager() {
       } else {
         setCurrentDriver(match.driverUsername || 'Not Assigned');
         setCurrentConductor(match.conductorUsername || 'Not Assigned');
+  setEditDriver(match.driverUsername || '');
+  setEditConductor(match.conductorUsername || '');
         // Prefill busId for forms if needed (requires id)
         if (match.id) {
           setDriverForm(prev => ({ ...prev, busId: String(match.id) }));
@@ -123,6 +127,36 @@ function AssignmentManager() {
   };
 
   const refreshLists = async () => { await loadAssignmentsForBus(); };
+
+  const saveFilteredDriver = async () => {
+    setError(''); setSuccess('');
+    if (!editDriver || !driverForm.busId) { setError('Driver username and Bus ID required'); return; }
+    try {
+      await adminUpdateDriverAssignment({ username: editDriver, busId: Number(driverForm.busId) });
+      setSuccess('Filtered bus driver updated');
+      await loadAssignmentsForBus();
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to update filtered driver');
+    }
+  };
+
+  const saveFilteredConductor = async () => {
+    setError(''); setSuccess('');
+    if (!editConductor || !conductorForm.busId) { setError('Conductor username and Bus ID required'); return; }
+    try {
+      await updateConductorAssignment(editConductor, Number(conductorForm.busId));
+      setSuccess('Filtered bus conductor updated');
+      await loadAssignmentsForBus();
+    } catch (e) {
+      const status = e?.response?.status;
+      if (status === 404) {
+        setConductorUpdateAvailable(false);
+        setError('No assignment API available for conductor (404).');
+      } else {
+        setError(e?.response?.data?.message || 'Failed to update filtered conductor');
+      }
+    }
+  };
 
   const handleChangeDriverBus = async () => {
     setError(''); setSuccess('');
@@ -200,10 +234,18 @@ function AssignmentManager() {
         <div>
           <h3>Current Driver</h3>
           <p style={{ marginTop: '.25rem' }}>{currentDriver || '—'}</p>
+          <div className="form" style={{ gap: '.5rem', marginTop: '.5rem' }}>
+            <input placeholder="Edit Driver Username" value={editDriver} onChange={(e) => setEditDriver(e.target.value)} />
+            <button onClick={saveFilteredDriver}>Save Driver</button>
+          </div>
         </div>
         <div>
           <h3>Current Conductor</h3>
           <p style={{ marginTop: '.25rem' }}>{currentConductor || '—'}</p>
+          <div className="form" style={{ gap: '.5rem', marginTop: '.5rem' }}>
+            <input placeholder="Edit Conductor Username" value={editConductor} onChange={(e) => setEditConductor(e.target.value)} />
+            <button onClick={saveFilteredConductor} disabled={!conductorUpdateAvailable}>Save Conductor</button>
+          </div>
         </div>
       </div>
 
