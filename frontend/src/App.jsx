@@ -1,14 +1,40 @@
 import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
 import AdminDashboard from './components/AdminDashboard';
 import { whoami } from './api/auth';
+import SeatAvailability from './components/SeatAvailability';
 import './App.css';
 
 // Simple auth util
 const isAuthed = () => !!localStorage.getItem('token');
+function SeatAvailabilityPageWrapper() {
+  const [me, setMe] = useState(null);
+  useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
+  const [busId, setBusId] = useState('');
+  const [scheduleId, setScheduleId] = useState('');
+  const role = me?.role || 'PASSENGER';
+  const username = me?.username || '';
+  return (
+    <div style={{ padding: '1rem' }}>
+      <h2>Seat Availability</h2>
+      <p style={{ color: '#555' }}>View seat grid. Enter Bus ID and optional Schedule ID.</p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <input placeholder="Bus ID" value={busId} onChange={e => setBusId(e.target.value)} />
+        <input placeholder="Schedule ID (optional)" value={scheduleId} onChange={e => setScheduleId(e.target.value)} />
+      </div>
+      {busId ? (
+        <SeatAvailability busId={Number(busId)} scheduleId={scheduleId ? Number(scheduleId) : undefined} role={role} username={username} />
+      ) : (
+        <div style={{ border: '1px dashed #ccc', padding: '1rem', borderRadius: 8 }}>
+          <strong>Placeholder:</strong> Seat grid will appear here.
+        </div>
+      )}
+    </div>
+  );
+}
 
 const Layout = ({ children }) => {
   const [me, setMe] = useState(null);
-  useEffect(() => { (async () => { try { setMe(await whoami()); } catch {} })(); }, []);
+  useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
   const isAdmin = me?.role === 'ADMIN';
   const isConductor = me?.role === 'CONDUCTOR';
   return (
@@ -20,8 +46,8 @@ const Layout = ({ children }) => {
         <Link to="/routes">Routes</Link>
         <Link to="/schedules">Schedules</Link>
         <Link to="/reservations">Reservations</Link>
-        <Link to="/driver">Driver</Link>
-  {isConductor && <Link to="/conductor">Seat Availability</Link>}
+  <Link to="/driver">Driver</Link>
+  <Link to="/seat-availability">Seat Availability</Link>
         <Link to="/login" style={{ marginLeft: 'auto' }}>Login</Link>
       </nav>
       <main>{children}</main>
@@ -48,6 +74,9 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/seat-availability" element={<SeatAvailabilityPageWrapper />} />
+
+        
           <Route path="/buses" element={<RequireAuth><BusesPage /></RequireAuth>} />
           <Route path="/routes" element={<RequireAuth><RoutesPage /></RequireAuth>} />
           <Route path="/schedules" element={<RequireAuth><SchedulesPage /></RequireAuth>} />

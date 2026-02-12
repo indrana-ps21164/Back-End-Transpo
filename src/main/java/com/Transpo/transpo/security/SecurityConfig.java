@@ -91,9 +91,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/reservations/**")
                     .hasAnyRole("PASSENGER", "CONDUCTOR", "ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/reservations/**")
-                    .hasRole("ADMIN")
+                    .hasAnyRole("CONDUCTOR", "ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/reservations/**")
-                    .hasRole("ADMIN")
+                    .hasAnyRole("PASSENGER", "CONDUCTOR", "ADMIN")
                 
                 // Admin-only endpoints
                 .requestMatchers(HttpMethod.POST,

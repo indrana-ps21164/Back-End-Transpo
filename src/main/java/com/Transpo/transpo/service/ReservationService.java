@@ -4,6 +4,7 @@ import com.Transpo.transpo.exception.BadRequestException;
 import com.Transpo.transpo.exception.ConflictException;
 import com.Transpo.transpo.exception.NotFoundException;
 import com.Transpo.transpo.dto.ReservationDTO;
+import com.Transpo.transpo.dto.SeatAvailabilityDTO;
 import com.Transpo.transpo.model.Reservation;
 import com.Transpo.transpo.model.Schedule;
 import com.Transpo.transpo.repository.ReservationRepository;
@@ -346,5 +347,113 @@ public class ReservationService {
 
     public List<Reservation> getAllReservations() {
         return reservationRepo.findAll();
+    }
+
+    /**
+     * Build seat availability grid by bus with role-based filtering.
+     */
+    public SeatAvailabilityDTO getSeatAvailability(Long busId, Long scheduleId, String username) {
+        if (busId == null) throw new BadRequestException("busId is required");
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String user = username != null ? username : (auth != null ? auth.getName() : null);
+        if (user == null) throw new BadRequestException("Authenticated user required");
+
+        // Determine schedule: use provided or pick the first upcoming schedule for this bus
+        Schedule schedule;
+        if (scheduleId != null) {
+            schedule = scheduleRepo.findById(scheduleId)
+                    .orElseThrow(() -> new NotFoundException("Schedule not found: " + scheduleId));
+            if (schedule.getBus() == null || !schedule.getBus().getId().equals(busId)) {
+                throw new BadRequestException("Schedule does not belong to bus");
+            }
+        } else {
+            schedule = scheduleRepo.findAll().stream()
+                    .filter(s -> s.getBus() != null && s.getBus().getId().equals(busId))
+                    .findFirst()
+                    .orElseThrow(() -> new NotFoundException("No schedule for bus: " + busId));
+        }
+
+        int totalSeats = schedule.getBus().getTotalSeats();
+        var reservations = reservationRepo.findByScheduleId(schedule.getId());
+
+        // Role-based filtering
+        var seats = new java.util.ArrayList<SeatAvailabilityDTO.Seat>(totalSeats);
+
+        // Determine role using SecurityContext authorities
+        boolean isAdmin = false;
+        boolean isConductor = false;
+        boolean isDriver = false;
+    java.util.Collection<? extends org.springframework.security.core.GrantedAuthority> authorities =
+        auth != null ? auth.getAuthorities() : java.util.List.of();
+    for (org.springframework.security.core.GrantedAuthority a : authorities) {
+            String role = a.getAuthority();
+            if (role != null) {
+                if (role.contains("ADMIN")) isAdmin = true;
+                if (role.contains("CONDUCTOR")) isConductor = true;
+                if (role.contains("DRIVER")) isDriver = true;
+                if (role.contains("PASSENGER")) {
+                    // nothing special to mark
+                }
+            }
+        }
+
+        // If conductor/driver, validate assignment to this bus
+        if (isDriver) {
+            driverAssignmentRepo.findByDriverUsername(user)
+                .filter(da -> da.getBus().getId().equals(busId))
+                .orElseThrow(() -> new BadRequestException("Driver not assigned to this bus"));
+        }
+
+        // Build seat statuses
+        java.util.Map<Integer, Reservation> bySeat = new java.util.HashMap<>();
+        for (Reservation r : reservations) {
+            bySeat.put(r.getSeatNumber(), r);
+        }
+        for (int i = 1; i <= totalSeats; i++) {
+            SeatAvailabilityDTO.Seat seat = new SeatAvailabilityDTO.Seat();
+        seat.seatNumber = i;
+            Reservation match = bySeat.get(i);
+            if (match == null) {
+                seat.status = "AVAILABLE";
+            } else {
+                seat.status = match.isPaid() ? "PAID" : "RESERVED";
+                // Expose passenger name only for admin/conductor
+                if (isAdmin || isConductor) {
+                    seat.passengerName = match.getPassengerName();
+                } else if (user.equals(match.getUsername())) {
+                    // Passenger sees only own seat name
+                    seat.passengerName = match.getPassengerName();
+                } else {
+                    seat.passengerName = null;
+                }
+            }
+            seats.add(seat);
+        }
+
+    SeatAvailabilityDTO dto = new SeatAvailabilityDTO();
+        dto.setBusId(schedule.getBus().getId());
+        dto.setBusNumber(schedule.getBus().getBusNumber());
+        dto.setScheduleId(schedule.getId());
+        dto.setTotalSeats(totalSeats);
+        // If passenger, hide seats that are not their own as AVAILABLE-only view
+        if (!isAdmin && !isConductor && !isDriver) {
+            String current = user;
+            java.util.ArrayList<SeatAvailabilityDTO.Seat> filtered = new java.util.ArrayList<>();
+            for (SeatAvailabilityDTO.Seat s : seats) {
+                Reservation match = bySeat.get(s.seatNumber);
+                if (match != null && !current.equals(match.getUsername())) {
+                    // Hide other passenger data; show status only
+                    SeatAvailabilityDTO.Seat ns = new SeatAvailabilityDTO.Seat();
+                    ns.seatNumber = s.seatNumber;
+                    ns.status = match.isPaid() ? "PAID" : "RESERVED";
+                    ns.passengerName = null;
+                    filtered.add(ns);
+                }
+                else { filtered.add(s); }
+            }
+            seats = filtered;
+        }
+        dto.setSeats(seats);
+        return dto;
     }
 }

@@ -5,6 +5,7 @@ import com.Transpo.transpo.mapper.ReservationMapper;
 import com.Transpo.transpo.model.Reservation;
 import com.Transpo.transpo.service.ReservationService;
 import com.Transpo.transpo.service.ReservationService.SeatInfoWithAllocation;
+import com.Transpo.transpo.dto.SeatAvailabilityDTO;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -30,10 +31,12 @@ public class ReservationController {
         String name = String.valueOf(req.get("passengerName"));
         String email = String.valueOf(req.get("passengerEmail"));
         int seatNumber = Integer.parseInt(String.valueOf(req.get("seatNumber")));
-        Long pickupStopId = req.get("pickupStopId") != null ? 
-                Long.valueOf(String.valueOf(req.get("pickupStopId"))) : null;
-        Long dropStopId = req.get("dropStopId") != null ? 
-                Long.valueOf(String.valueOf(req.get("dropStopId"))) : null;
+    Long pickupStopId = req.get("pickupStopId") != null ? 
+        Long.valueOf(String.valueOf(req.get("pickupStopId"))) : null;
+    Long dropStopId = req.get("dropStopId") != null ? 
+        Long.valueOf(String.valueOf(req.get("dropStopId"))) : null;
+    // Optional name-based fields from frontend; backend will resolve if ids not provided
+    // Frontend may send pickup/drop names; backend currently uses IDs. If names are passed, ignore for now.
 
         Reservation r = reservationService.bookSeat(scheduleId, name, email, seatNumber, pickupStopId, dropStopId);
         return ResponseEntity.ok(ReservationMapper.toDto(r));
@@ -54,6 +57,20 @@ public class ReservationController {
         return ResponseEntity.ok(info);
     }
 
+    /**
+     * Seat availability by bus with role-based filtering.
+     */
+    @GetMapping("/seat-availability")
+    public ResponseEntity<SeatAvailabilityDTO> getSeatAvailability(
+            @RequestParam Long busId,
+            @RequestParam(required = false) Long scheduleId
+    ) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = auth != null ? auth.getName() : null;
+        SeatAvailabilityDTO dto = reservationService.getSeatAvailability(busId, scheduleId, username);
+        return ResponseEntity.ok(dto);
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<ReservationDTO> update(@PathVariable Long id, @RequestBody ReservationDTO dto) {
     // Role check performed inside service
@@ -71,6 +88,18 @@ public class ReservationController {
     @GetMapping
     public ResponseEntity<List<ReservationDTO>> list() {
         List<ReservationDTO> list = reservationService.getAllReservations()
+                .stream()
+                .map(ReservationMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(list);
+    }
+
+    /**
+     * Current user's reservations
+     */
+    @GetMapping("/me")
+    public ResponseEntity<List<ReservationDTO>> listForMe() {
+        List<ReservationDTO> list = reservationService.getReservationsForCurrentUser()
                 .stream()
                 .map(ReservationMapper::toDto)
                 .collect(Collectors.toList());
