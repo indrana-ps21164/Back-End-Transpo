@@ -73,6 +73,19 @@ public class ScheduleService {
     }
 
     @Transactional(readOnly = true)
+    public List<Schedule> findByBusNumber(String busNumber) {
+        if (busNumber == null || busNumber.isBlank()) return List.of();
+        List<Schedule> schedules = scheduleRepo.findAll().stream()
+                .filter(s -> s.getBus() != null && busNumber.equals(s.getBus().getBusNumber()))
+                .collect(Collectors.toList());
+        schedules.forEach(s -> {
+            if (s.getBus() != null) s.getBus().getBusNumber();
+            if (s.getRoute() != null) s.getRoute().getOrigin();
+        });
+        return schedules;
+    }
+
+    @Transactional(readOnly = true)
     public Schedule get(Long id) {
         Schedule schedule = scheduleRepo.findById(id).orElse(null);
         if (schedule != null) {

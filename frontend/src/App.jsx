@@ -53,18 +53,78 @@ function SeatAvailabilityPageWrapper() {
   useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
   const [busNumber, setBusNumber] = useState('');
   const [scheduleId, setScheduleId] = useState('');
+  const [busList, setBusList] = useState([]);
+  const [busLoading, setBusLoading] = useState(false);
+  const [busError, setBusError] = useState('');
+  const [times, setTimes] = useState([]);
+  const [timesLoading, setTimesLoading] = useState(false);
+  const [timesError, setTimesError] = useState('');
   const role = me?.role || 'PASSENGER';
   const username = me?.username || '';
+  // Load buses (drivers see only their assigned bus; others see all)
+  useEffect(() => {
+    (async () => {
+      try {
+        setBusLoading(true); setBusError('');
+        const res = await fetch('/api/buses');
+        const data = await res.json();
+        const items = Array.isArray(data) ? data : (data?.content ?? []);
+        let options = (items || [])
+          .filter(b => b && (b.busNumber || b.number))
+          .map(b => ({ id: b.id, busNumber: b.busNumber || b.number }));
+        // If driver, reduce to assigned bus only
+        if (me?.role === 'DRIVER') {
+          const assignedNumber = me?.assignedBusNumber || null;
+          const assignedId = me?.assignedBusId || null;
+          options = options.filter(o =>
+            (assignedNumber && o.busNumber === assignedNumber) || (assignedId && o.id === assignedId)
+          );
+        }
+        setBusList(options);
+      } catch (e) {
+        setBusError('Failed to load buses'); setBusList([]);
+      } finally { setBusLoading(false); }
+    })();
+  }, []);
+
+  // Load times when bus changes
+  useEffect(() => {
+    (async () => {
+      if (!busNumber) { setTimes([]); setScheduleId(''); return; }
+      try {
+        setTimesLoading(true); setTimesError('');
+        const res = await fetch(`/api/schedules?busNumber=${encodeURIComponent(busNumber)}`);
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        setTimes(list);
+        setScheduleId('');
+      } catch (e) {
+        setTimesError('Failed to load departure times'); setTimes([]); setScheduleId('');
+      } finally { setTimesLoading(false); }
+    })();
+  }, [busNumber]);
+
   return (
     <div style={{ padding: '1rem' }}>
       <h2>Seat Availability</h2>
-  <p style={{ color: '#555' }}>View seat grid. Enter Bus Number and optional Schedule ID.</p>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input placeholder="Bus Number" value={busNumber} onChange={e => setBusNumber(e.target.value)} />
-        <input placeholder="Schedule ID (optional)" value={scheduleId} onChange={e => setScheduleId(e.target.value)} />
+      <p style={{ color: '#555' }}>Select Bus Number and Departure Time to view seats.</p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <select value={busNumber} onChange={e => setBusNumber(e.target.value)} disabled={busLoading || busList.length === 0}>
+          <option value="">{busLoading ? 'Loading buses…' : busList.length === 0 ? 'No buses available' : 'Select Bus Number'}</option>
+          {busList.map(b => (
+            <option key={b.id} value={b.busNumber}>{b.busNumber}</option>
+          ))}
+        </select>
+        <select disabled={!busNumber || timesLoading || times.length === 0} value={scheduleId} onChange={e => setScheduleId(e.target.value)}>
+          <option value="">{timesLoading ? 'Loading times…' : times.length === 0 ? 'No departure times' : 'Select Departure Time'}</option>
+          {times.map(t => (
+            <option key={t.id} value={t.id}>{String(t.departureTime).replace('T',' ')}</option>
+          ))}
+        </select>
       </div>
-      {busNumber ? (
-        <SeatAvailability busNumber={busNumber} scheduleId={scheduleId ? Number(scheduleId) : undefined} role={role} username={username} />
+      {(busError || timesError) && <div style={{ color: 'red', marginBottom: 8 }}>{busError || timesError}</div>}
+      {busNumber && scheduleId ? (
+        <SeatAvailability busNumber={busNumber} scheduleId={Number(scheduleId)} role={role} username={username} />
       ) : (
         <div style={{ border: '1px dashed #ccc', padding: '1rem', borderRadius: 8 }}>
           <strong>Placeholder:</strong> Seat grid will appear here.

@@ -403,11 +403,20 @@ public class ReservationService {
             }
         }
 
-        // If conductor/driver, validate assignment to this bus
+        // If driver, validate assignment to this bus. Allow validation via busId, busNumber, or schedule's bus.
         if (isDriver) {
-            driverAssignmentRepo.findByDriverUsername(user)
-                .filter(da -> da.getBus().getId().equals(busId))
-                .orElseThrow(() -> new BadRequestException("Driver not assigned to this bus"));
+            var assignmentOpt = driverAssignmentRepo.findByDriverUsername(user);
+            var assignment = assignmentOpt.orElseThrow(() -> new NotFoundException("Driver assignment not found"));
+            Long assignedBusId = assignment.getBus() != null ? assignment.getBus().getId() : null;
+            String assignedBusNumber = assignment.getBus() != null ? assignment.getBus().getBusNumber() : null;
+
+            boolean matchesById = (busId != null && assignedBusId != null && assignedBusId.equals(busId));
+            boolean matchesByNumber = (busNumber != null && !busNumber.isBlank() && assignedBusNumber != null && assignedBusNumber.equalsIgnoreCase(busNumber));
+            boolean matchesBySchedule = (assignedBusId != null && schedule.getBus() != null && assignedBusId.equals(schedule.getBus().getId()));
+
+            if (!(matchesById || matchesByNumber || matchesBySchedule)) {
+                throw new BadRequestException("Driver not assigned to this bus");
+            }
         }
 
         // Build seat statuses
