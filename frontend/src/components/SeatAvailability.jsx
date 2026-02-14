@@ -97,10 +97,12 @@ export default function SeatAvailability({ busNumber, scheduleId, role, username
       fontSize: 12, position: 'relative'
     };
     let bg = COLORS.AVAILABLE;
-    if (s.status === 'RESERVED') bg = COLORS.RESERVED;
-    if (s.status === 'PAID') bg = COLORS.PAID;
+    // Prefer manual state if present
+    const state = s.state || s.status;
+    if (state === 'RESERVED') bg = COLORS.RESERVED;
+    if (state === 'PAID') bg = COLORS.PAID;
+    if (state === 'DISABLED') bg = COLORS.DISABLED;
     if (selectedSeat === s.seatNumber) bg = COLORS.SELECTED;
-    if (readOnly && s.status === 'AVAILABLE' && !canManage) bg = COLORS.DISABLED;
     return { ...base, background: bg, color: '#fff' };
   };
 
@@ -118,7 +120,7 @@ export default function SeatAvailability({ busNumber, scheduleId, role, username
       {!loading && seats && seats.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 52px)', gap: 8 }}>
           {seats.map(s => (
-            <div key={s.seatNumber} style={seatStyle(s)} onClick={() => onSeatClick(s)} title={`${'Seat ' + s.seatNumber} | ${s.status}${(s.passengerName && (role === 'ADMIN' || role === 'CONDUCTOR')) ? ' | ' + s.passengerName : ''}`}>
+            <div key={s.seatNumber} style={seatStyle(s)} onClick={() => onSeatClick(s)} title={`${'Seat ' + s.seatNumber} | ${(s.state || s.status)}${(s.passengerName && (role === 'ADMIN' || role === 'CONDUCTOR')) ? ' | ' + s.passengerName : ''}`}>
               {s.seatNumber}
             </div>
           ))}
@@ -154,21 +156,49 @@ export default function SeatAvailability({ busNumber, scheduleId, role, username
                   <option value="DISABLED">Disabled</option>
                 </select>
                 <button disabled={!panel.nextState} onClick={async () => {
+                  // Optimistic UI update: reflect color change immediately
+                  const next = panel.nextState;
+                  const seatNo = selectedSeat;
+                  let previousState;
                   try {
                     setPanel(p => ({ ...p, stateMsg: '', error: '' }));
-                    const res = await fetch(`/api/reservations/seat/state?scheduleId=${encodeURIComponent(scheduleId)}&seatNumber=${encodeURIComponent(selectedSeat)}&state=${encodeURIComponent(panel.nextState)}`, { method: 'PUT' });
+                    // Update local grid state
+                    setData(prev => {
+                      if (!prev) return prev;
+                      const seats = (prev.seats || []).map(s => {
+                        if (s.seatNumber === seatNo) {
+                          previousState = s.state || s.status;
+                          return { ...s, state: next };
+                        }
+                        return s;
+                      });
+                      return { ...prev, seats };
+                    });
+
+                    // Persist to backend
+                    const res = await fetch(`/api/reservations/seat/state?scheduleId=${encodeURIComponent(scheduleId)}&seatNumber=${encodeURIComponent(seatNo)}&state=${encodeURIComponent(next)}`, { method: 'PUT' });
                     if (!res.ok) throw new Error('Update failed');
-                    // refresh panel and seat grid
-                    const dres = await fetch(`/api/reservations/seat?scheduleId=${encodeURIComponent(scheduleId)}&seatNumber=${encodeURIComponent(selectedSeat)}`);
+
+                    // Refresh right panel info only (no full grid fetch)
+                    const dres = await fetch(`/api/reservations/seat?scheduleId=${encodeURIComponent(scheduleId)}&seatNumber=${encodeURIComponent(seatNo)}`);
                     const info = await dres.json();
                     setPanel(p => ({ ...p, info, stateMsg: 'State updated' }));
-                    // also refresh availability
-                    try {
-                      setLoading(true);
-                      const ares = await getSeatAvailability(busNumber, scheduleId);
-                      setData(ares);
-                    } finally { setLoading(false); }
                   } catch (e) {
+                    // Roll back on failure
+                    setData(prev => {
+                      if (!prev) return prev;
+                      const seats = (prev.seats || []).map(s => {
+                        if (s.seatNumber === seatNo) {
+                          const base = { ...s };
+                          if (previousState) {
+                            base.state = previousState;
+                          }
+                          return base;
+                        }
+                        return s;
+                      });
+                      return { ...prev, seats };
+                    });
                     setPanel(p => ({ ...p, error: 'Failed to update state' }));
                   }
                 }}>Apply</button>
