@@ -18,6 +18,7 @@ import com.Transpo.transpo.model.BusStop;
 import com.Transpo.transpo.repository.BusStopRepository;
 import com.Transpo.transpo.repository.DriverAssignmentRepository;
 import com.Transpo.transpo.repository.SeatStateRepository;
+import com.Transpo.transpo.repository.ConductorAssignmentRepository;
 import com.Transpo.transpo.model.SeatState;
 
 
@@ -34,19 +35,22 @@ public class ReservationService {
     private final BusStopRepository busStopRepo;
     private final DriverAssignmentRepository driverAssignmentRepo;
     private final SeatStateRepository seatStateRepo;
+    private final ConductorAssignmentRepository conductorAssignmentRepo;
 
     public ReservationService(ReservationRepository reservationRepo, 
                              ScheduleRepository scheduleRepo,
                              ReservationRuleService ruleService,
                              BusStopRepository busStopRepo,
                              DriverAssignmentRepository driverAssignmentRepo,
-                             SeatStateRepository seatStateRepo) {
+                             SeatStateRepository seatStateRepo,
+                             ConductorAssignmentRepository conductorAssignmentRepo) {
         this.reservationRepo = reservationRepo;
         this.scheduleRepo = scheduleRepo;
         this.ruleService = ruleService;
         this.busStopRepo = busStopRepo;
         this.driverAssignmentRepo = driverAssignmentRepo;
         this.seatStateRepo = seatStateRepo;
+        this.conductorAssignmentRepo = conductorAssignmentRepo;
     }
 
     /**
@@ -339,6 +343,22 @@ public class ReservationService {
     }
 
     /**
+     * Get reservations by conductor (for their assigned bus)
+     */
+    public List<Reservation> getReservationsForConductor(String username) {
+    var assignment = conductorAssignmentRepo.findAll().stream()
+        .filter(a -> a.getConductor() != null && username.equals(a.getConductor().getUsername()))
+        .findFirst()
+        .orElseThrow(() -> new NotFoundException("Conductor assignment not found"));
+    List<Schedule> schedules = scheduleRepo.findAll().stream()
+        .filter(s -> s.getBus() != null && s.getBus().getId().equals(assignment.getBus().getId()))
+        .collect(Collectors.toList());
+    return schedules.stream()
+        .flatMap(s -> reservationRepo.findByScheduleId(s.getId()).stream())
+        .collect(Collectors.toList());
+    }
+
+    /**
      * Get reservations for the currently logged-in user
      */
     public List<Reservation> getReservationsForCurrentUser() {
@@ -391,9 +411,9 @@ public class ReservationService {
         var seats = new java.util.ArrayList<SeatAvailabilityDTO.Seat>(totalSeats);
 
         // Determine role using SecurityContext authorities
-        boolean isAdmin = false;
-        boolean isConductor = false;
-        boolean isDriver = false;
+    boolean isAdmin = false;
+    boolean isConductor = false;
+    boolean isDriver = false;
     java.util.Collection<? extends org.springframework.security.core.GrantedAuthority> authorities =
         auth != null ? auth.getAuthorities() : java.util.List.of();
     for (org.springframework.security.core.GrantedAuthority a : authorities) {
@@ -408,7 +428,7 @@ public class ReservationService {
             }
         }
 
-        // If driver, validate assignment to this bus. Allow validation via busId, busNumber, or schedule's bus.
+    // If driver, validate assignment to this bus. Allow validation via busId, busNumber, or schedule's bus.
         if (isDriver) {
             var assignmentOpt = driverAssignmentRepo.findByDriverUsername(user);
             var assignment = assignmentOpt.orElseThrow(() -> new NotFoundException("Driver assignment not found"));
@@ -421,6 +441,17 @@ public class ReservationService {
 
             if (!(matchesById || matchesByNumber || matchesBySchedule)) {
                 throw new BadRequestException("Driver not assigned to this bus");
+            }
+        }
+
+        // If conductor, validate assignment similarly
+        if (isConductor) {
+            // Validate that the accessed bus matches the schedule's bus and provided filters
+            boolean matchesById = (busId != null && schedule.getBus() != null && schedule.getBus().getId().equals(busId));
+            boolean matchesByNumber = (busNumber != null && !busNumber.isBlank() && schedule.getBus() != null && schedule.getBus().getBusNumber() != null && schedule.getBus().getBusNumber().equalsIgnoreCase(busNumber));
+            boolean matchesBySchedule = (schedule.getBus() != null);
+            if (!(matchesById || matchesByNumber || matchesBySchedule)) {
+                throw new BadRequestException("Conductor not assigned to this bus");
             }
         }
 
