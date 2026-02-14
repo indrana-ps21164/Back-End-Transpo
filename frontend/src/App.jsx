@@ -3,6 +3,48 @@ import AdminDashboard from './components/AdminDashboard';
 import { whoami } from './api/auth';
 import SeatAvailability from './components/SeatAvailability';
 import './App.css';
+// Role-based menu config and helpers
+const MENU_CONFIG = {
+  DRIVER: [
+    { path: '/', label: 'Dashboard' },
+    { path: '/schedules', label: 'Schedules' },
+    { path: '/reservations', label: 'Reservations' },
+    { path: '/seat-availability', label: 'Seat Availability' },
+    { path: '/driver', label: 'Driver' },
+  ],
+  PASSENGER: [
+    { path: '/', label: 'Dashboard' },
+    { path: '/reservations', label: 'Reservations' },
+    { path: '/seat-availability', label: 'Seat Availability' },
+  ],
+  CONDUCTOR: [
+    { path: '/', label: 'Dashboard' },
+    { path: '/schedules', label: 'Schedules' },
+    { path: '/reservations', label: 'Reservations' },
+    { path: '/seat-availability', label: 'Seat Availability' },
+  ],
+  ADMIN: [
+    { path: '/', label: 'Dashboard' },
+    { path: '/admin', label: 'Admin' },
+    { path: '/buses', label: 'Buses' },
+    { path: '/routes', label: 'Routes' },
+    { path: '/schedules', label: 'Schedules' },
+    { path: '/reservations', label: 'Reservations' },
+  ],
+};
+const getStoredRole = () => sessionStorage.getItem('role') || localStorage.getItem('role') || null;
+const setStoredRole = (role) => { sessionStorage.setItem('role', role); localStorage.setItem('role', role); };
+const clearStoredRole = () => { sessionStorage.removeItem('role'); localStorage.removeItem('role'); };
+
+function AccessDenied() {
+  return (
+    <div style={{ padding: '1rem' }}>
+      <h2>Access Denied</h2>
+      <p>You do not have permission to view this page.</p>
+      <Link to="/">Go to Dashboard</Link>
+    </div>
+  );
+}
 
 // Simple auth util
 const isAuthed = () => !!localStorage.getItem('token');
@@ -16,7 +58,7 @@ function SeatAvailabilityPageWrapper() {
   return (
     <div style={{ padding: '1rem' }}>
       <h2>Seat Availability</h2>
-      <p style={{ color: '#555' }}>View seat grid. Enter Bus ID and optional Schedule ID.</p>
+  <p style={{ color: '#555' }}>View seat grid. Enter Bus Number and optional Schedule ID.</p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <input placeholder="Bus Number" value={busNumber} onChange={e => setBusNumber(e.target.value)} />
         <input placeholder="Schedule ID (optional)" value={scheduleId} onChange={e => setScheduleId(e.target.value)} />
@@ -34,24 +76,25 @@ function SeatAvailabilityPageWrapper() {
 
 const Layout = ({ children }) => {
   const [me, setMe] = useState(null);
-  useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
+  const [role, setRole] = useState(getStoredRole());
+  useEffect(() => {
+    (async () => {
+      try {
+        const m = await whoami();
+        setMe(m);
+        if (m?.role) { setRole(m.role); setStoredRole(m.role); }
+      } catch {}
+    })();
+  }, []);
   const authed = isAuthed();
-  const isAdmin = me?.role === 'ADMIN';
-  const isConductor = me?.role === 'CONDUCTOR';
-  const onLogout = () => { localStorage.removeItem('token'); window.location.href = '/login'; };
+  const menus = role && MENU_CONFIG[role] ? MENU_CONFIG[role] : [];
+  const onLogout = () => { localStorage.removeItem('token'); clearStoredRole(); window.location.href = '/login'; };
   return (
     <div className="container">
       <nav className="nav">
         {authed ? (
           <>
-            <Link to="/">Dashboard</Link>
-            {isAdmin && <Link to="/admin">Admin</Link>}
-            <Link to="/buses">Buses</Link>
-            <Link to="/routes">Routes</Link>
-            <Link to="/schedules">Schedules</Link>
-            <Link to="/reservations">Reservations</Link>
-            <Link to="/driver">Driver</Link>
-            <Link to="/seat-availability">Seat Availability</Link>
+            {menus.map((m) => (<Link key={m.path} to={m.path}>{m.label}</Link>))}
             <button onClick={onLogout} style={{ marginLeft: 'auto' }}>Logout</button>
           </>
         ) : (
@@ -71,6 +114,13 @@ const RequireAuth = ({ children }) => {
   return children;
 };
 
+const RequireRole = ({ role, children }) => {
+  const current = getStoredRole();
+  if (!isAuthed()) return <Navigate to="/login" replace />;
+  if (!current || current !== role) return <Navigate to="/access-denied" replace />;
+  return children;
+};
+
 import PassengerDashboard from './components/PassengerDashboard';
 import ConductorDashboard from './components/ConductorDashboard';
 const Dashboard = () => (
@@ -87,14 +137,15 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/seat-availability" element={<RequireAuth><SeatAvailabilityPageWrapper /></RequireAuth>} />
 
-          <Route path="/buses" element={<RequireAuth><BusesPage /></RequireAuth>} />
-          <Route path="/routes" element={<RequireAuth><RoutesPage /></RequireAuth>} />
+          <Route path="/buses" element={<RequireRole role="ADMIN"><BusesPage /></RequireRole>} />
+          <Route path="/routes" element={<RequireRole role="ADMIN"><RoutesPage /></RequireRole>} />
           <Route path="/schedules" element={<RequireAuth><SchedulesPage /></RequireAuth>} />
           <Route path="/reservations" element={<RequireAuth><ReservationsPage /></RequireAuth>} />
           <Route path="/map" element={<RequireAuth><MapPage /></RequireAuth>} />
-          <Route path="/driver" element={<RequireAuth><DriverDashboard /></RequireAuth>} />
-          <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
-          <Route path="/conductor" element={<RequireAuth><ConductorDashboard /></RequireAuth>} />
+          <Route path="/driver" element={<RequireRole role="DRIVER"><DriverDashboard /></RequireRole>} />
+          <Route path="/admin" element={<RequireRole role="ADMIN"><AdminDashboard /></RequireRole>} />
+          <Route path="/conductor" element={<RequireRole role="CONDUCTOR"><ConductorDashboard /></RequireRole>} />
+          <Route path="/access-denied" element={<AccessDenied />} />
           <Route path="*" element={<Navigate to={isAuthed() ? '/' : '/login'} replace />} />
         </Routes>
       </Layout>
@@ -277,7 +328,9 @@ function LoginPage() {
     try {
       const data = await login(username, password);
       // Backend returns message/username/roles; no token. Store username as session marker.
-      localStorage.setItem('token', data.username || '');
+  localStorage.setItem('token', data.username || '');
+  const role = (data?.roles?.[0] || data?.role || '').toUpperCase();
+  if (role) setStoredRole(role);
       window.location.href = '/';
     } catch (err) {
   const resp = err?.response?.data;
@@ -317,6 +370,8 @@ function RegisterPage() {
       setLoading(true);
       const data = await register(payload);
       setMsg(data.message || 'Registered');
+  const role = (payload.role || '').toUpperCase();
+  if (role) setStoredRole(role);
     } catch (err) {
       const resp = err?.response?.data;
       setError(resp?.error || resp?.message || 'Registration failed');
@@ -357,10 +412,7 @@ function BusesPage() {
       try {
         const data = await getBuses();
         setItems(Array.isArray(data) ? data : (data?.content ?? []));
-        try {
-          const me = await whoami();
-          setIsAdmin(me?.role === 'ADMIN');
-        } catch {}
+        try { const me = await whoami(); setIsAdmin(me?.role === 'ADMIN'); } catch {}
       } catch (err) {
         setError(err?.response?.data?.message || 'Failed to load buses');
       } finally {
