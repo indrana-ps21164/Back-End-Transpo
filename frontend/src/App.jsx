@@ -35,20 +35,31 @@ function SeatAvailabilityPageWrapper() {
 const Layout = ({ children }) => {
   const [me, setMe] = useState(null);
   useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
+  const authed = isAuthed();
   const isAdmin = me?.role === 'ADMIN';
   const isConductor = me?.role === 'CONDUCTOR';
+  const onLogout = () => { localStorage.removeItem('token'); window.location.href = '/login'; };
   return (
     <div className="container">
       <nav className="nav">
-        <Link to="/">Dashboard</Link>
-        {isAdmin && <Link to="/admin">Admin</Link>}
-        <Link to="/buses">Buses</Link>
-        <Link to="/routes">Routes</Link>
-        <Link to="/schedules">Schedules</Link>
-        <Link to="/reservations">Reservations</Link>
-  <Link to="/driver">Driver</Link>
-  <Link to="/seat-availability">Seat Availability</Link>
-        <Link to="/login" style={{ marginLeft: 'auto' }}>Login</Link>
+        {authed ? (
+          <>
+            <Link to="/">Dashboard</Link>
+            {isAdmin && <Link to="/admin">Admin</Link>}
+            <Link to="/buses">Buses</Link>
+            <Link to="/routes">Routes</Link>
+            <Link to="/schedules">Schedules</Link>
+            <Link to="/reservations">Reservations</Link>
+            <Link to="/driver">Driver</Link>
+            <Link to="/seat-availability">Seat Availability</Link>
+            <button onClick={onLogout} style={{ marginLeft: 'auto' }}>Logout</button>
+          </>
+        ) : (
+          <>
+            <Link to="/login">Login</Link>
+            <Link to="/register" style={{ marginLeft: '0.5rem' }}>Register</Link>
+          </>
+        )}
       </nav>
       <main>{children}</main>
     </div>
@@ -71,12 +82,11 @@ export default function App() {
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="/seat-availability" element={<SeatAvailabilityPageWrapper />} />
+          <Route path="/seat-availability" element={<RequireAuth><SeatAvailabilityPageWrapper /></RequireAuth>} />
 
-        
           <Route path="/buses" element={<RequireAuth><BusesPage /></RequireAuth>} />
           <Route path="/routes" element={<RequireAuth><RoutesPage /></RequireAuth>} />
           <Route path="/schedules" element={<RequireAuth><SchedulesPage /></RequireAuth>} />
@@ -85,6 +95,7 @@ export default function App() {
           <Route path="/driver" element={<RequireAuth><DriverDashboard /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
           <Route path="/conductor" element={<RequireAuth><ConductorDashboard /></RequireAuth>} />
+          <Route path="*" element={<Navigate to={isAuthed() ? '/' : '/login'} replace />} />
         </Routes>
       </Layout>
     </BrowserRouter>
