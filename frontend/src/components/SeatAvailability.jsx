@@ -35,6 +35,7 @@ export default function SeatAvailability({ busNumber, scheduleId, role, username
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedSeat, setSelectedSeat] = useState(null);
+  const [panel, setPanel] = useState({ loading: false, error: '', info: null, stateMsg: '' });
 
   const canManage = role === 'ADMIN' || role === 'CONDUCTOR';
   const readOnly = role === 'DRIVER';
@@ -64,7 +65,7 @@ export default function SeatAvailability({ busNumber, scheduleId, role, username
     return arr;
   }, [data]);
 
-  const onSeatClick = (s) => {
+  const onSeatClick = async (s) => {
     if (loading) return;
     // Driver cannot click; Passenger can click only AVAILABLE or their own reserved seat; Admin/Conductor full manage.
     const mySeat = s && data && Array.isArray(data.seats) && data.seats.find(x => x.seatNumber === s.seatNumber);
@@ -73,6 +74,19 @@ export default function SeatAvailability({ busNumber, scheduleId, role, username
     const allowedPassengerClick = role === 'PASSENGER' && (s.status === 'AVAILABLE' || isMine);
     if (readOnly || (!canManage && !allowedPassengerClick)) return;
     setSelectedSeat(s.seatNumber === selectedSeat ? null : s.seatNumber);
+    // Conductor: load right panel seat details
+    if (role === 'CONDUCTOR' && scheduleId && s) {
+      try {
+        setPanel(p => ({ ...p, loading: true, error: '', stateMsg: '' }));
+        const res = await fetch(`/api/reservations/seat?scheduleId=${encodeURIComponent(scheduleId)}&seatNumber=${encodeURIComponent(s.seatNumber)}`);
+        const info = await res.json();
+        setPanel(p => ({ ...p, loading: false, info }));
+      } catch (e) {
+        setPanel(p => ({ ...p, loading: false, error: 'Failed to load seat details' }));
+      }
+    } else {
+      setPanel({ loading: false, error: '', info: null, stateMsg: '' });
+    }
   };
 
   const seatStyle = (s) => {
@@ -91,7 +105,7 @@ export default function SeatAvailability({ busNumber, scheduleId, role, username
   };
 
   return (
-    <div>
+    <div style={{ display: 'grid', gridTemplateColumns: role === 'CONDUCTOR' ? '1fr 300px' : '1fr', gap: 12 }}>
       <h3>Seat Availability</h3>
       {data && (
         <div style={{ marginBottom: 8 }}>
@@ -108,6 +122,60 @@ export default function SeatAvailability({ busNumber, scheduleId, role, username
               {s.seatNumber}
             </div>
           ))}
+        </div>
+      )}
+      {role === 'CONDUCTOR' && (
+        <div style={{ borderLeft: '1px solid #eee', paddingLeft: 12 }}>
+          <h4>Seat Details</h4>
+          {!selectedSeat && <div>Select a seat to view details</div>}
+          {selectedSeat && panel.loading && <div>Loading seat details…</div>}
+          {selectedSeat && panel.error && <div style={{ color: 'red' }}>{panel.error}</div>}
+          {selectedSeat && !panel.loading && panel.info && (
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div><strong>Seat:</strong> {panel.info.seatNumber}</div>
+              <div><strong>Schedule:</strong> {panel.info.scheduleId}</div>
+              {panel.info.reserved ? (
+                <>
+                  <div><strong>Reservation ID:</strong> {panel.info.reservationId}</div>
+                  <div><strong>Passenger:</strong> {panel.info.passengerName}</div>
+                  <div><strong>Payment:</strong> {panel.info.paid ? 'Paid' : 'Unpaid'}</div>
+                </>
+              ) : (
+                <div style={{ color: '#555' }}>Not Reserved</div>
+              )}
+              <div><strong>Manual State:</strong> {panel.info.state || '—'}</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label>Change State</label>
+                <select onChange={e => setPanel(p => ({ ...p, nextState: e.target.value }))} defaultValue="">
+                  <option value="">Select state…</option>
+                  <option value="AVAILABLE">Available</option>
+                  <option value="RESERVED">Reserved</option>
+                  <option value="PAID">Paid</option>
+                  <option value="DISABLED">Disabled</option>
+                </select>
+                <button disabled={!panel.nextState} onClick={async () => {
+                  try {
+                    setPanel(p => ({ ...p, stateMsg: '', error: '' }));
+                    const res = await fetch(`/api/reservations/seat/state?scheduleId=${encodeURIComponent(scheduleId)}&seatNumber=${encodeURIComponent(selectedSeat)}&state=${encodeURIComponent(panel.nextState)}`, { method: 'PUT' });
+                    if (!res.ok) throw new Error('Update failed');
+                    // refresh panel and seat grid
+                    const dres = await fetch(`/api/reservations/seat?scheduleId=${encodeURIComponent(scheduleId)}&seatNumber=${encodeURIComponent(selectedSeat)}`);
+                    const info = await dres.json();
+                    setPanel(p => ({ ...p, info, stateMsg: 'State updated' }));
+                    // also refresh availability
+                    try {
+                      setLoading(true);
+                      const ares = await getSeatAvailability(busNumber, scheduleId);
+                      setData(ares);
+                    } finally { setLoading(false); }
+                  } catch (e) {
+                    setPanel(p => ({ ...p, error: 'Failed to update state' }));
+                  }
+                }}>Apply</button>
+                {panel.stateMsg && <div style={{ color: 'green' }}>{panel.stateMsg}</div>}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

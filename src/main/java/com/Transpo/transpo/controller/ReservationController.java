@@ -58,6 +58,24 @@ public class ReservationController {
     }
 
     /**
+     * Conductor: Get seat details for a schedule + seat number
+     */
+    @GetMapping("/seat")
+    public ResponseEntity<?> getSeatDetails(@RequestParam Long scheduleId, @RequestParam int seatNumber) {
+        var details = reservationService.getSeatDetails(scheduleId, seatNumber);
+        return ResponseEntity.ok(details);
+    }
+
+    /**
+     * Conductor-only: Update seat state for a schedule + seat number
+     */
+    @PutMapping("/seat/state")
+    public ResponseEntity<?> updateSeatState(@RequestParam Long scheduleId, @RequestParam int seatNumber, @RequestParam String state) {
+        reservationService.updateSeatState(scheduleId, seatNumber, state);
+        return ResponseEntity.ok(java.util.Map.of("message", "Seat state updated"));
+    }
+
+    /**
      * Seat availability by bus with role-based filtering.
      */
     @GetMapping("/seat-availability")

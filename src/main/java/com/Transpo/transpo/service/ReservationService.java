@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.Transpo.transpo.model.BusStop;
 import com.Transpo.transpo.repository.BusStopRepository;
 import com.Transpo.transpo.repository.DriverAssignmentRepository;
+import com.Transpo.transpo.repository.SeatStateRepository;
+import com.Transpo.transpo.model.SeatState;
 
 
 import java.util.Collections;
@@ -31,17 +33,20 @@ public class ReservationService {
     private final ReservationRuleService ruleService;
     private final BusStopRepository busStopRepo;
     private final DriverAssignmentRepository driverAssignmentRepo;
+    private final SeatStateRepository seatStateRepo;
 
     public ReservationService(ReservationRepository reservationRepo, 
                              ScheduleRepository scheduleRepo,
                              ReservationRuleService ruleService,
                              BusStopRepository busStopRepo,
-                             DriverAssignmentRepository driverAssignmentRepo) {
+                             DriverAssignmentRepository driverAssignmentRepo,
+                             SeatStateRepository seatStateRepo) {
         this.reservationRepo = reservationRepo;
         this.scheduleRepo = scheduleRepo;
         this.ruleService = ruleService;
         this.busStopRepo = busStopRepo;
         this.driverAssignmentRepo = driverAssignmentRepo;
+        this.seatStateRepo = seatStateRepo;
     }
 
     /**
@@ -470,5 +475,62 @@ public class ReservationService {
         }
         dto.setSeats(seats);
         return dto;
+    }
+
+    /**
+     * Return seat details for a given schedule and seat number: reservation info and current state overlay.
+     */
+    public java.util.Map<String, Object> getSeatDetails(Long scheduleId, int seatNumber) {
+        Schedule schedule = scheduleRepo.findById(scheduleId)
+                .orElseThrow(() -> new NotFoundException("Schedule not found: " + scheduleId));
+        Reservation match = reservationRepo.findByScheduleId(scheduleId).stream()
+                .filter(r -> r.getSeatNumber() == seatNumber)
+                .findFirst().orElse(null);
+        SeatState state = seatStateRepo.findByScheduleAndSeatNumber(schedule, seatNumber).orElse(null);
+        java.util.Map<String,Object> resp = new java.util.HashMap<>();
+        resp.put("seatNumber", seatNumber);
+        resp.put("scheduleId", scheduleId);
+        if (match != null) {
+            resp.put("reserved", true);
+            resp.put("reservationId", match.getId());
+            resp.put("passengerName", match.getPassengerName());
+            resp.put("paid", match.isPaid());
+        } else {
+            resp.put("reserved", false);
+        }
+        resp.put("state", state != null ? state.getState() : null);
+        return resp;
+    }
+
+    /**
+     * Conductor-only: update a manual seat state overlay.
+     */
+    @Transactional
+    public void updateSeatState(Long scheduleId, int seatNumber, String state) {
+        if (state == null || state.isBlank()) throw new BadRequestException("state is required");
+        String normalized = state.toUpperCase();
+        java.util.Set<String> allowed = java.util.Set.of("AVAILABLE", "RESERVED", "PAID", "DISABLED");
+        if (!allowed.contains(normalized)) throw new BadRequestException("Invalid state");
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) throw new BadRequestException("Authentication required");
+        boolean isConductor = auth.getAuthorities().stream().anyMatch(a -> {
+            String role = a.getAuthority();
+            return role != null && role.contains("CONDUCTOR");
+        });
+        if (!isConductor) throw new BadRequestException("Only conductor can update seat state");
+
+        Schedule schedule = scheduleRepo.findById(scheduleId)
+                .orElseThrow(() -> new NotFoundException("Schedule not found: " + scheduleId));
+        SeatState seatState = seatStateRepo.findByScheduleAndSeatNumber(schedule, seatNumber)
+                .orElseGet(() -> {
+                    SeatState s = new SeatState();
+                    s.setSchedule(schedule);
+                    s.setSeatNumber(seatNumber);
+                    return s;
+                });
+        seatState.setState(normalized);
+        seatState.setUpdatedBy(auth.getName());
+        seatStateRepo.save(seatState);
     }
 }
