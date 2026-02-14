@@ -277,4 +277,36 @@ public class DriverService {
         
         return mapData;
     }
+
+        /**
+         * Get reservations for the driver's assigned bus
+         */
+        public List<Map<String, Object>> getAssignedBusReservations() {
+                User driver = getCurrentDriver();
+                DriverAssignment assignment = driverAssignmentRepo.findByDriverId(driver.getId())
+                                .orElseThrow(() -> new NotFoundException("Driver has no bus assignment"));
+                Bus bus = assignment.getBus();
+                // Find schedules for this bus
+                List<Schedule> schedules = scheduleRepository.findAll().stream()
+                                .filter(s -> s.getBus().getId().equals(bus.getId()))
+                                .collect(Collectors.toList());
+                // Collect reservations across schedules
+                List<Map<String, Object>> results = new java.util.ArrayList<>();
+                for (Schedule schedule : schedules) {
+                        List<Reservation> reservations = reservationRepository.findByScheduleId(schedule.getId());
+                        for (Reservation r : reservations) {
+                                Map<String, Object> dto = new HashMap<>();
+                                dto.put("id", r.getId());
+                                dto.put("scheduleId", schedule.getId());
+                                dto.put("passengerName", r.getPassengerName());
+                                dto.put("passengerEmail", r.getPassengerEmail());
+                                dto.put("seatNumber", r.getSeatNumber());
+                                dto.put("bookingTime", r.getBookingTime());
+                                dto.put("busId", bus.getId());
+                                dto.put("busNumber", bus.getBusNumber());
+                                results.add(dto);
+                        }
+                }
+                return results;
+        }
 }

@@ -25,9 +25,17 @@ public class DriverController {
     
     // Get driver's assigned bus
     @GetMapping("/my-bus")
-    public ResponseEntity<Bus> getMyBus() {
+    public ResponseEntity<Map<String, Object>> getMyBus() {
         Bus bus = driverService.getAssignedBus();
-        return ResponseEntity.ok(bus);
+        if (bus == null) {
+            return ResponseEntity.ok(Map.of("id", null, "busNumber", null, "busName", null));
+        }
+        return ResponseEntity.ok(Map.of(
+                "id", bus.getId(),
+                "busNumber", bus.getBusNumber(),
+                "busName", bus.getBusName(),
+                "totalSeats", bus.getTotalSeats()
+        ));
     }
     
     // Change driver's assigned bus
@@ -83,6 +91,13 @@ public class DriverController {
     public ResponseEntity<Map<String, Object>> getMapData(@PathVariable Long routeId) {
         Map<String, Object> mapData = driverService.getMapData(routeId);
         return ResponseEntity.ok(mapData);
+    }
+
+    // Driver: reservations for the assigned bus
+    @GetMapping("/reservations")
+    public ResponseEntity<List<Map<String, Object>>> getAssignedBusReservations() {
+        List<Map<String, Object>> list = driverService.getAssignedBusReservations();
+        return ResponseEntity.ok(list);
     }
 
     // Live location: driver posts current lat/lng; stored in-memory keyed by username

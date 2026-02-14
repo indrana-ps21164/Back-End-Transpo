@@ -16,3 +16,8 @@ export const whoami = async () => {
   const { data } = await client.get('/auth/whoami');
   return data;
 };
+
+export const updateProfile = async (payload) => {
+  const { data } = await client.put('/auth/update-profile', payload);
+  return data;
+};
