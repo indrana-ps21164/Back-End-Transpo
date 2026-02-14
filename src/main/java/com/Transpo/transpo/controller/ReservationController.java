@@ -62,12 +62,13 @@ public class ReservationController {
      */
     @GetMapping("/seat-availability")
     public ResponseEntity<SeatAvailabilityDTO> getSeatAvailability(
-            @RequestParam Long busId,
+            @RequestParam(required = false) Long busId,
+            @RequestParam(required = false) String busNumber,
             @RequestParam(required = false) Long scheduleId
     ) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String username = auth != null ? auth.getName() : null;
-        SeatAvailabilityDTO dto = reservationService.getSeatAvailability(busId, scheduleId, username);
+        SeatAvailabilityDTO dto = reservationService.getSeatAvailability(busId, busNumber, scheduleId, username);
         return ResponseEntity.ok(dto);
     }
 

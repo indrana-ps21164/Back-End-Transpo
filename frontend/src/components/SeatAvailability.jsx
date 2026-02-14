@@ -30,7 +30,7 @@ function Legend() {
   );
 }
 
-export default function SeatAvailability({ busId, scheduleId, role, username }) {
+export default function SeatAvailability({ busNumber, scheduleId, role, username }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,13 +44,13 @@ export default function SeatAvailability({ busId, scheduleId, role, username }) 
       try {
         setLoading(true);
         setError('');
-        const res = await getSeatAvailability(busId, scheduleId);
+  const res = await getSeatAvailability(busNumber, scheduleId);
         setData(res);
       } catch (e) {
         setError(e?.response?.data?.message || e?.message || 'Failed to load seat availability');
       } finally { setLoading(false); }
     })();
-  }, [busId, scheduleId]);
+  }, [busNumber, scheduleId]);
 
   const seats = useMemo(() => {
     if (!data) return [];

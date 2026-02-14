@@ -352,8 +352,10 @@ public class ReservationService {
     /**
      * Build seat availability grid by bus with role-based filtering.
      */
-    public SeatAvailabilityDTO getSeatAvailability(Long busId, Long scheduleId, String username) {
-        if (busId == null) throw new BadRequestException("busId is required");
+    public SeatAvailabilityDTO getSeatAvailability(Long busId, String busNumber, Long scheduleId, String username) {
+        if (busId == null && (busNumber == null || busNumber.isBlank())) {
+            throw new BadRequestException("busId or busNumber is required");
+        }
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String user = username != null ? username : (auth != null ? auth.getName() : null);
         if (user == null) throw new BadRequestException("Authenticated user required");
@@ -363,14 +365,18 @@ public class ReservationService {
         if (scheduleId != null) {
             schedule = scheduleRepo.findById(scheduleId)
                     .orElseThrow(() -> new NotFoundException("Schedule not found: " + scheduleId));
-            if (schedule.getBus() == null || !schedule.getBus().getId().equals(busId)) {
+            if (busId != null && (schedule.getBus() == null || !schedule.getBus().getId().equals(busId))) {
                 throw new BadRequestException("Schedule does not belong to bus");
             }
         } else {
             schedule = scheduleRepo.findAll().stream()
-                    .filter(s -> s.getBus() != null && s.getBus().getId().equals(busId))
+                    .filter(s -> {
+                        if (s.getBus() == null) return false;
+                        if (busId != null) return s.getBus().getId().equals(busId);
+                        return s.getBus().getBusNumber() != null && s.getBus().getBusNumber().equalsIgnoreCase(busNumber);
+                    })
                     .findFirst()
-                    .orElseThrow(() -> new NotFoundException("No schedule for bus: " + busId));
+                    .orElseThrow(() -> new NotFoundException("No schedule for bus: " + (busId != null ? busId : busNumber)));
         }
 
         int totalSeats = schedule.getBus().getTotalSeats();
@@ -431,8 +437,8 @@ public class ReservationService {
         }
 
     SeatAvailabilityDTO dto = new SeatAvailabilityDTO();
-        dto.setBusId(schedule.getBus().getId());
-        dto.setBusNumber(schedule.getBus().getBusNumber());
+    dto.setBusId(schedule.getBus().getId());
+    dto.setBusNumber(schedule.getBus().getBusNumber());
         dto.setScheduleId(schedule.getId());
         dto.setTotalSeats(totalSeats);
         // If passenger, hide seats that are not their own as AVAILABLE-only view

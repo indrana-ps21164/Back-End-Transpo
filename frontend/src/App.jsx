@@ -9,7 +9,7 @@ const isAuthed = () => !!localStorage.getItem('token');
 function SeatAvailabilityPageWrapper() {
   const [me, setMe] = useState(null);
   useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
-  const [busId, setBusId] = useState('');
+  const [busNumber, setBusNumber] = useState('');
   const [scheduleId, setScheduleId] = useState('');
   const role = me?.role || 'PASSENGER';
   const username = me?.username || '';
@@ -18,11 +18,11 @@ function SeatAvailabilityPageWrapper() {
       <h2>Seat Availability</h2>
       <p style={{ color: '#555' }}>View seat grid. Enter Bus ID and optional Schedule ID.</p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input placeholder="Bus ID" value={busId} onChange={e => setBusId(e.target.value)} />
+        <input placeholder="Bus Number" value={busNumber} onChange={e => setBusNumber(e.target.value)} />
         <input placeholder="Schedule ID (optional)" value={scheduleId} onChange={e => setScheduleId(e.target.value)} />
       </div>
-      {busId ? (
-        <SeatAvailability busId={Number(busId)} scheduleId={scheduleId ? Number(scheduleId) : undefined} role={role} username={username} />
+      {busNumber ? (
+        <SeatAvailability busNumber={busNumber} scheduleId={scheduleId ? Number(scheduleId) : undefined} role={role} username={username} />
       ) : (
         <div style={{ border: '1px dashed #ccc', padding: '1rem', borderRadius: 8 }}>
           <strong>Placeholder:</strong> Seat grid will appear here.
