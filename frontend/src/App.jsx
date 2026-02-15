@@ -356,6 +356,89 @@ import {
   getAdminBuses,
   getDriverBusReservations,
 } from './api/resources';
+// Payment validation API client
+async function validatePayment(payload) {
+  const res = await fetch('/api/payments/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Payment validation failed');
+  return res.json();
+}
+
+function PaymentPortal({ open, onClose, onAuthorized }) {
+  const [paymentNumber, setPaymentNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvv, setCvv] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  if (!open) return null;
+  const handlePurchase = async () => {
+    setError('');
+    // Required checks
+    if (!paymentNumber || !expiry || !cvv) {
+      setError('All fields are required');
+      return;
+    }
+    if (!/^\d{16}$/.test(paymentNumber.replace(/\s+/g, ''))) {
+      setError('Payment number must be 16 digits');
+      return;
+    }
+    if (!/^\d{3}$/.test(cvv)) {
+      setError('Security key (CVV) must be 3 digits');
+      return;
+    }
+    setLoading(true);
+    try {
+      const resp = await validatePayment({ paymentNumber, expiry, cvv });
+      if (resp?.valid) {
+        onAuthorized({ paymentNumber, expiry, cvv, message: resp?.message });
+        onClose();
+      } else {
+        setError(resp?.message || 'Payment declined');
+      }
+    } catch (e) {
+      setError(e?.message || 'Payment failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: 'min(860px, 94vw)', padding: '1rem', boxShadow: '0 12px 28px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div style={{ background: 'linear-gradient(135deg,#0f62fe,#4589ff)', color: '#fff', borderRadius: 12, padding: '1rem', minHeight: 220, position: 'relative' }}>
+            <div style={{ fontWeight: 600, fontSize: '1rem' }}>Transpo Card</div>
+            <div style={{ marginTop: '1.25rem', letterSpacing: 2, fontSize: '1.1rem' }}>{paymentNumber || '•••• •••• •••• ••••'}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.9rem' }}>
+              <div>Expiry: {expiry || 'MM/YY'}</div>
+              <div>CVV: {cvv || '***'}</div>
+            </div>
+            <div style={{ position: 'absolute', bottom: 12, right: 12, fontSize: '.8rem', opacity: 0.9 }}>Secure • PCI</div>
+          </div>
+          <div>
+            <h3 style={{ margin: 0 }}>Payment Details</h3>
+            {error && <p style={{ color: 'red', marginTop: '.25rem' }}>{error}</p>}
+            <div className="form" style={{ flexWrap: 'wrap' }}>
+              <input required placeholder="Payment Number (16 digits)" value={paymentNumber} onChange={e => setPaymentNumber(e.target.value.replace(/[^\d\s]/g, ''))} />
+              <input required placeholder="Expiry (MM/YY or MM/YYYY)" value={expiry} onChange={e => setExpiry(e.target.value)} />
+              <input required placeholder="Security Key (CVV)" value={cvv} onChange={e => setCvv(e.target.value.replace(/[^0-9]/g, ''))} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handlePurchase} disabled={loading}>
+                  {loading ? 'Processing…' : 'Purchase'}
+                </button>
+                <button onClick={onClose} disabled={loading}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 // Driver dashboard with live map
 function DriverDashboard() {
   const [me, setMe] = useState(null);
@@ -1161,6 +1244,7 @@ function ReservationsPage() {
   const [dropStop, setDropStop] = useState('');
   const [paymentNumber, setPaymentNumber] = useState('');
   const [securityKey, setSecurityKey] = useState('');
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const [role, setRole] = useState(getStoredRole());
   const [driverBus, setDriverBus] = useState(null);
 
@@ -1218,36 +1302,33 @@ function ReservationsPage() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    // Validate fake payment inputs
-    if (!/^\d{10}$/.test(paymentNumber)) {
-      setError('Payment number must be 10 digits.');
-      return;
-    }
-    if (!/^\d{3}$/.test(securityKey)) {
-      setError('Security key must be 3 digits.');
-      return;
-    }
+    // Open payment portal first; booking proceeds after authorization
+    setPaymentOpen(true);
+  };
+
+  const onPaymentAuthorized = async ({ paymentNumber, expiry, cvv }) => {
     try {
       await createReservation({
         scheduleId: Number(scheduleId),
         passengerName,
         passengerEmail,
         seatNumber: Number(seatNumber),
-        // Pass pickup/drop names; backend may map to stop IDs
         pickup: pickupStop,
         drop: dropStop,
-        status: 'BOOKED',
+        status: 'PAID',
+        paymentMethod: 'CARD',
+        paymentReference: `${paymentNumber.slice(-4)}-${expiry}`,
       });
       try {
         const resp = await fetch('/api/reservations/my');
         const data = await resp.json();
         setMine(Array.isArray(data) ? data : (data?.content ?? []));
       } catch {}
-      setSuccess('Reservation successful. Seat booked.');
-      // Clear only payment inputs; keep schedule/pickup/drop visible
+      setSuccess('Payment successful. Seat booked.');
       setPaymentNumber(''); setSecurityKey('');
+      window.dispatchEvent(new CustomEvent('seat-availability-updated'));
     } catch (e) {
-      setError(e?.response?.data?.message || e?.message || 'Failed to create reservation');
+      setError(e?.response?.data?.message || e?.message || 'Failed to create reservation after payment');
     }
   };
 
@@ -1268,6 +1349,7 @@ function ReservationsPage() {
 
   return (
     <div>
+  <PaymentPortal open={paymentOpen} onClose={() => setPaymentOpen(false)} onAuthorized={onPaymentAuthorized} />
       <h2>Reservations</h2>
       <div style={{ marginBottom: '.5rem' }}>
         <button onClick={handleGoBack}>Go Back</button>
@@ -1281,10 +1363,9 @@ function ReservationsPage() {
         <input placeholder="Seat Number" type="number" value={seatNumber} onChange={(e) => setSeatNumber(e.target.value)} />
         <input placeholder="Pickup Stop" value={pickupStop} onChange={(e) => setPickupStop(e.target.value)} />
         <input placeholder="Drop Stop" value={dropStop} onChange={(e) => setDropStop(e.target.value)} />
-        {/* Fake payment section */}
-        <input placeholder="Payment Number (10 digits)" value={paymentNumber} onChange={(e) => setPaymentNumber(e.target.value.replace(/[^0-9]/g, ''))} />
-        <input placeholder="Security Key (3 digits)" value={securityKey} onChange={(e) => setSecurityKey(e.target.value.replace(/[^0-9]/g, ''))} />
-        <button type="submit">Create</button>
+  {/* Payment trigger (portal will collect number/expiry/cvv) */}
+  <input required placeholder="Phone Number" value={paymentNumber} onChange={(e) => setPaymentNumber(e.target.value.replace(/[^0-9]/g, ''))} />
+  <button type="submit">Book / Pay</button>
       </form>
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', alignItems: 'start' }}>
