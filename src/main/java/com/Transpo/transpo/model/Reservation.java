@@ -33,6 +33,10 @@ public class Reservation {
     private String paymentReference; // optional
 
     private String username; // logged-in username of passenger
+    // Creator username (who made the reservation)
+    private String createdBy;
+    // Status: RESERVED, PAID, CANCELLED
+    private String status = "RESERVED";
 
     public Reservation() {
     }
@@ -106,4 +110,10 @@ public class Reservation {
     public void setUsername(String username) {
         this.username = username;
     }
+
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 }

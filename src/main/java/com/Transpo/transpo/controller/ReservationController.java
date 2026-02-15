@@ -28,7 +28,7 @@ public class ReservationController {
     public ResponseEntity<ReservationDTO> book(@RequestBody Map<String, Object> req) {
     // Role check performed inside service (Admin full; Conductor restricted to their bus; Passenger self only)
         Long scheduleId = Long.valueOf(String.valueOf(req.get("scheduleId")));
-        String name = String.valueOf(req.get("passengerName"));
+    String name = req.get("passengerName") != null ? String.valueOf(req.get("passengerName")) : null;
         String email = String.valueOf(req.get("passengerEmail"));
         int seatNumber = Integer.parseInt(String.valueOf(req.get("seatNumber")));
     Long pickupStopId = req.get("pickupStopId") != null ? 
@@ -38,6 +38,11 @@ public class ReservationController {
     // Optional name-based fields from frontend; backend will resolve if ids not provided
     // Frontend may send pickup/drop names; backend currently uses IDs. If names are passed, ignore for now.
 
+        // If name missing/blank, use authenticated username
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if ((name == null || name.isBlank()) && auth != null && auth.isAuthenticated()) {
+            name = auth.getName();
+        }
         Reservation r = reservationService.bookSeat(scheduleId, name, email, seatNumber, pickupStopId, dropStopId);
         return ResponseEntity.ok(ReservationMapper.toDto(r));
     }
@@ -58,16 +63,35 @@ public class ReservationController {
     }
 
     /**
+     * Conductor: Get seat details for a schedule + seat number
+     */
+    @GetMapping("/seat")
+    public ResponseEntity<?> getSeatDetails(@RequestParam Long scheduleId, @RequestParam int seatNumber) {
+        var details = reservationService.getSeatDetails(scheduleId, seatNumber);
+        return ResponseEntity.ok(details);
+    }
+
+    /**
+     * Conductor-only: Update seat state for a schedule + seat number
+     */
+    @PutMapping("/seat/state")
+    public ResponseEntity<?> updateSeatState(@RequestParam Long scheduleId, @RequestParam int seatNumber, @RequestParam String state) {
+        reservationService.updateSeatState(scheduleId, seatNumber, state);
+        return ResponseEntity.ok(java.util.Map.of("message", "Seat state updated"));
+    }
+
+    /**
      * Seat availability by bus with role-based filtering.
      */
     @GetMapping("/seat-availability")
     public ResponseEntity<SeatAvailabilityDTO> getSeatAvailability(
-            @RequestParam Long busId,
+            @RequestParam(required = false) Long busId,
+            @RequestParam(required = false) String busNumber,
             @RequestParam(required = false) Long scheduleId
     ) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String username = auth != null ? auth.getName() : null;
-        SeatAvailabilityDTO dto = reservationService.getSeatAvailability(busId, scheduleId, username);
+        SeatAvailabilityDTO dto = reservationService.getSeatAvailability(busId, busNumber, scheduleId, username);
         return ResponseEntity.ok(dto);
     }
 
@@ -103,6 +127,35 @@ public class ReservationController {
                 .stream()
                 .map(ReservationMapper::toDto)
                 .collect(Collectors.toList());
+        return ResponseEntity.ok(list);
+    }
+
+    /**
+     * Current user's created reservations (by createdBy)
+     */
+    @GetMapping("/my")
+    public ResponseEntity<List<ReservationDTO>> listMyCreated() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = (auth != null && auth.isAuthenticated()) ? auth.getName() : null;
+        if (username == null) {
+            return ResponseEntity.ok(java.util.List.of());
+        }
+        List<ReservationDTO> list = reservationService.getReservationsCreatedBy(username)
+                .stream()
+                .map(ReservationMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(list);
+    }
+
+    /**
+     * Current user's reservation history
+     */
+    @GetMapping("/history")
+    public ResponseEntity<List<Map<String,Object>>> listHistory() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = (auth != null && auth.isAuthenticated()) ? auth.getName() : null;
+        if (username == null) return ResponseEntity.ok(java.util.List.of());
+        var list = reservationService.getReservationHistoryForUser(username);
         return ResponseEntity.ok(list);
     }
 

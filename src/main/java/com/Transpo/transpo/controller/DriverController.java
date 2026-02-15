@@ -25,9 +25,17 @@ public class DriverController {
     
     // Get driver's assigned bus
     @GetMapping("/my-bus")
-    public ResponseEntity<Bus> getMyBus() {
+    public ResponseEntity<Map<String, Object>> getMyBus() {
         Bus bus = driverService.getAssignedBus();
-        return ResponseEntity.ok(bus);
+        if (bus == null) {
+            return ResponseEntity.ok(Map.of("id", null, "busNumber", null, "busName", null));
+        }
+        return ResponseEntity.ok(Map.of(
+                "id", bus.getId(),
+                "busNumber", bus.getBusNumber(),
+                "busName", bus.getBusName(),
+                "totalSeats", bus.getTotalSeats()
+        ));
     }
     
     // Change driver's assigned bus
@@ -83,6 +91,32 @@ public class DriverController {
     public ResponseEntity<Map<String, Object>> getMapData(@PathVariable Long routeId) {
         Map<String, Object> mapData = driverService.getMapData(routeId);
         return ResponseEntity.ok(mapData);
+    }
+
+    /**
+     * Driver-only: Pickup points for a selected bus/schedule.
+     * Returns markers with passenger name, seat number, and pickup stop info.
+     */
+    @GetMapping("/pickups")
+    public ResponseEntity<List<Map<String, Object>>> getPickupPoints(
+            @RequestParam(required = false) Long busId,
+            @RequestParam(required = false) String busNumber,
+            @RequestParam Long scheduleId,
+            Authentication auth
+    ) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(401).body(java.util.List.of());
+        }
+        // Delegate to service which enforces driver assignment
+        List<Map<String, Object>> points = driverService.getPickupPointsForDriver(busId, busNumber, scheduleId, auth.getName());
+        return ResponseEntity.ok(points);
+    }
+
+    // Driver: reservations for the assigned bus
+    @GetMapping("/reservations")
+    public ResponseEntity<List<Map<String, Object>>> getAssignedBusReservations() {
+        List<Map<String, Object>> list = driverService.getAssignedBusReservations();
+        return ResponseEntity.ok(list);
     }
 
     // Live location: driver posts current lat/lng; stored in-memory keyed by username

@@ -8,6 +8,8 @@ import com.Transpo.transpo.dto.SeatAvailabilityDTO;
 import com.Transpo.transpo.model.Reservation;
 import com.Transpo.transpo.model.Schedule;
 import com.Transpo.transpo.repository.ReservationRepository;
+import com.Transpo.transpo.repository.ReservationHistoryRepository;
+import com.Transpo.transpo.model.ReservationHistory;
 import com.Transpo.transpo.repository.ScheduleRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,6 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.Transpo.transpo.model.BusStop;
 import com.Transpo.transpo.repository.BusStopRepository;
 import com.Transpo.transpo.repository.DriverAssignmentRepository;
+import com.Transpo.transpo.repository.SeatStateRepository;
+import com.Transpo.transpo.repository.ConductorAssignmentRepository;
+import com.Transpo.transpo.model.SeatState;
 
 
 import java.util.Collections;
@@ -31,17 +36,26 @@ public class ReservationService {
     private final ReservationRuleService ruleService;
     private final BusStopRepository busStopRepo;
     private final DriverAssignmentRepository driverAssignmentRepo;
+    private final SeatStateRepository seatStateRepo;
+    private final ConductorAssignmentRepository conductorAssignmentRepo;
+    private final ReservationHistoryRepository reservationHistoryRepo;
 
     public ReservationService(ReservationRepository reservationRepo, 
                              ScheduleRepository scheduleRepo,
                              ReservationRuleService ruleService,
                              BusStopRepository busStopRepo,
-                             DriverAssignmentRepository driverAssignmentRepo) {
+                             DriverAssignmentRepository driverAssignmentRepo,
+                             SeatStateRepository seatStateRepo,
+                             ConductorAssignmentRepository conductorAssignmentRepo,
+                             ReservationHistoryRepository reservationHistoryRepo) {
         this.reservationRepo = reservationRepo;
         this.scheduleRepo = scheduleRepo;
         this.ruleService = ruleService;
         this.busStopRepo = busStopRepo;
         this.driverAssignmentRepo = driverAssignmentRepo;
+        this.seatStateRepo = seatStateRepo;
+        this.conductorAssignmentRepo = conductorAssignmentRepo;
+        this.reservationHistoryRepo = reservationHistoryRepo;
     }
 
     /**
@@ -82,15 +96,11 @@ public class ReservationService {
             throw new ConflictException("No seats available");
         }
 
-        // Check duplicate seat booking and duplicate booking by the same user
+        // Check duplicate seat booking only (allow multiple reservations by same user on same schedule)
         List<Reservation> existing = reservationRepo.findByScheduleId(scheduleId);
-        String currentUser = getCurrentUsername();
         for (Reservation r : existing) {
-            if (r.getSeatNumber() == seatNumber) {
+            if (r.getSeatNumber() == seatNumber && (r.getStatus() == null || r.getStatus().equalsIgnoreCase("RESERVED") || r.isPaid())) {
                 throw new ConflictException("Seat " + seatNumber + " already taken for this schedule");
-            }
-            if (r.getUsername() != null && r.getUsername().equals(currentUser)) {
-                throw new ConflictException("You have already booked a seat on this schedule");
             }
         }
 
@@ -138,10 +148,13 @@ public class ReservationService {
         res.setSeatNumber(seatNumber);
         res.setPickupStop(pickupStop);
         res.setDropStop(dropStop);
+    res.setStatus("RESERVED");
         // set username from logged-in user
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.isAuthenticated()) {
             res.setUsername(auth.getName());
+            // also set creator username
+            res.setCreatedBy(auth.getName());
         }
 
         return reservationRepo.save(res);
@@ -155,20 +168,53 @@ public class ReservationService {
     public void cancelReservation(Long reservationId) {
         Reservation r = reservationRepo.findById(reservationId)
                 .orElseThrow(() -> new NotFoundException("Reservation not found: " + reservationId));
-        
+
         Schedule schedule = r.getSchedule();
         if (schedule == null) {
             throw new BadRequestException("Reservation has no associated schedule");
         }
 
-        // Apply business rules for cancellation
-        ruleService.validateReservationRules(getCurrentUsername(), schedule, false);
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new BadRequestException("Authentication required");
+        }
+        String user = auth.getName();
+        boolean isAdmin = auth.getAuthorities().stream().anyMatch(a -> {
+            String role = a.getAuthority();
+            return role != null && role.contains("ADMIN");
+        });
+        if (!(isAdmin || (r.getCreatedBy() != null && r.getCreatedBy().equals(user)))) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Not allowed to cancel this reservation");
+        }
+        if (r.isPaid()) {
+            throw new BadRequestException("Cannot cancel a paid reservation");
+        }
 
-        // Increase availability
-        schedule.setAvailableSeats(schedule.getAvailableSeats() + 1);
-        scheduleRepo.save(schedule);
-        
-        reservationRepo.delete(r);
+        // Business rules validation for cancellation
+        ruleService.validateReservationRules(user, schedule, false);
+
+    // Copy to history, delete original, free seat
+    ReservationHistory h = new ReservationHistory();
+    h.setBookingTime(r.getBookingTime());
+    h.setCreatedBy(r.getCreatedBy());
+    h.setDropStopId(r.getDropStop() != null ? r.getDropStop().getId() : null);
+    h.setPaid(r.isPaid());
+    h.setPassengerEmail(r.getPassengerEmail());
+    h.setPassengerName(r.getPassengerName());
+    h.setPaymentMethod(r.getPaymentMethod());
+    h.setPaymentReference(r.getPaymentReference());
+    h.setPickupStopId(r.getPickupStop() != null ? r.getPickupStop().getId() : null);
+    h.setScheduleId(r.getSchedule() != null ? r.getSchedule().getId() : null);
+    h.setSeatNumber(r.getSeatNumber());
+    h.setStatus("CANCELLED");
+    h.setUsername(r.getUsername());
+    h.setCancelledAt(java.time.LocalDateTime.now());
+    reservationHistoryRepo.save(h);
+
+    // Delete original reservation and free seat
+    reservationRepo.delete(r);
+    schedule.setAvailableSeats(schedule.getAvailableSeats() + 1);
+    scheduleRepo.save(schedule);
     }
 
     @Transactional
@@ -334,6 +380,22 @@ public class ReservationService {
     }
 
     /**
+     * Get reservations by conductor (for their assigned bus)
+     */
+    public List<Reservation> getReservationsForConductor(String username) {
+    var assignment = conductorAssignmentRepo.findAll().stream()
+        .filter(a -> a.getConductor() != null && username.equals(a.getConductor().getUsername()))
+        .findFirst()
+        .orElseThrow(() -> new NotFoundException("Conductor assignment not found"));
+    List<Schedule> schedules = scheduleRepo.findAll().stream()
+        .filter(s -> s.getBus() != null && s.getBus().getId().equals(assignment.getBus().getId()))
+        .collect(Collectors.toList());
+    return schedules.stream()
+        .flatMap(s -> reservationRepo.findByScheduleId(s.getId()).stream())
+        .collect(Collectors.toList());
+    }
+
+    /**
      * Get reservations for the currently logged-in user
      */
     public List<Reservation> getReservationsForCurrentUser() {
@@ -345,15 +407,52 @@ public class ReservationService {
         return reservationRepo.findByUsername(username);
     }
 
+    /**
+     * Get reservations created by the current user (createdBy filter)
+     */
+    public List<Reservation> getReservationsCreatedBy(String username) {
+        if (username == null || username.isBlank()) return java.util.List.of();
+        return reservationRepo.findByCreatedBy(username);
+    }
+
     public List<Reservation> getAllReservations() {
         return reservationRepo.findAll();
+    }
+
+    public List<java.util.Map<String,Object>> getReservationHistoryForUser(String username) {
+        var items = reservationHistoryRepo.findByUsername(username);
+        java.util.List<java.util.Map<String,Object>> out = new java.util.ArrayList<>();
+        for (var h : items) {
+            java.util.Map<String,Object> m = new java.util.HashMap<>();
+            m.put("id", h.getId());
+            m.put("passengerName", h.getPassengerName());
+            m.put("passengerEmail", h.getPassengerEmail());
+            m.put("seatNumber", h.getSeatNumber());
+            m.put("bookingTime", h.getBookingTime());
+            m.put("cancelledAt", h.getCancelledAt());
+            m.put("scheduleId", h.getScheduleId());
+            // busNumber and departureTime require joins; fetch from schedule if available
+            try {
+                if (h.getScheduleId() != null) {
+                    var sched = scheduleRepo.findById(h.getScheduleId()).orElse(null);
+                    if (sched != null) {
+                        m.put("busNumber", sched.getBus() != null ? sched.getBus().getBusNumber() : null);
+                        m.put("departureTime", sched.getDepartureTime());
+                    }
+                }
+            } catch (Exception ignored) {}
+            out.add(m);
+        }
+        return out;
     }
 
     /**
      * Build seat availability grid by bus with role-based filtering.
      */
-    public SeatAvailabilityDTO getSeatAvailability(Long busId, Long scheduleId, String username) {
-        if (busId == null) throw new BadRequestException("busId is required");
+    public SeatAvailabilityDTO getSeatAvailability(Long busId, String busNumber, Long scheduleId, String username) {
+        if (busId == null && (busNumber == null || busNumber.isBlank())) {
+            throw new BadRequestException("busId or busNumber is required");
+        }
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String user = username != null ? username : (auth != null ? auth.getName() : null);
         if (user == null) throw new BadRequestException("Authenticated user required");
@@ -363,14 +462,18 @@ public class ReservationService {
         if (scheduleId != null) {
             schedule = scheduleRepo.findById(scheduleId)
                     .orElseThrow(() -> new NotFoundException("Schedule not found: " + scheduleId));
-            if (schedule.getBus() == null || !schedule.getBus().getId().equals(busId)) {
+            if (busId != null && (schedule.getBus() == null || !schedule.getBus().getId().equals(busId))) {
                 throw new BadRequestException("Schedule does not belong to bus");
             }
         } else {
             schedule = scheduleRepo.findAll().stream()
-                    .filter(s -> s.getBus() != null && s.getBus().getId().equals(busId))
+                    .filter(s -> {
+                        if (s.getBus() == null) return false;
+                        if (busId != null) return s.getBus().getId().equals(busId);
+                        return s.getBus().getBusNumber() != null && s.getBus().getBusNumber().equalsIgnoreCase(busNumber);
+                    })
                     .findFirst()
-                    .orElseThrow(() -> new NotFoundException("No schedule for bus: " + busId));
+                    .orElseThrow(() -> new NotFoundException("No schedule for bus: " + (busId != null ? busId : busNumber)));
         }
 
         int totalSeats = schedule.getBus().getTotalSeats();
@@ -380,9 +483,9 @@ public class ReservationService {
         var seats = new java.util.ArrayList<SeatAvailabilityDTO.Seat>(totalSeats);
 
         // Determine role using SecurityContext authorities
-        boolean isAdmin = false;
-        boolean isConductor = false;
-        boolean isDriver = false;
+    boolean isAdmin = false;
+    boolean isConductor = false;
+    boolean isDriver = false;
     java.util.Collection<? extends org.springframework.security.core.GrantedAuthority> authorities =
         auth != null ? auth.getAuthorities() : java.util.List.of();
     for (org.springframework.security.core.GrantedAuthority a : authorities) {
@@ -397,11 +500,31 @@ public class ReservationService {
             }
         }
 
-        // If conductor/driver, validate assignment to this bus
+    // If driver, validate assignment to this bus. Allow validation via busId, busNumber, or schedule's bus.
         if (isDriver) {
-            driverAssignmentRepo.findByDriverUsername(user)
-                .filter(da -> da.getBus().getId().equals(busId))
-                .orElseThrow(() -> new BadRequestException("Driver not assigned to this bus"));
+            var assignmentOpt = driverAssignmentRepo.findByDriverUsername(user);
+            var assignment = assignmentOpt.orElseThrow(() -> new NotFoundException("Driver assignment not found"));
+            Long assignedBusId = assignment.getBus() != null ? assignment.getBus().getId() : null;
+            String assignedBusNumber = assignment.getBus() != null ? assignment.getBus().getBusNumber() : null;
+
+            boolean matchesById = (busId != null && assignedBusId != null && assignedBusId.equals(busId));
+            boolean matchesByNumber = (busNumber != null && !busNumber.isBlank() && assignedBusNumber != null && assignedBusNumber.equalsIgnoreCase(busNumber));
+            boolean matchesBySchedule = (assignedBusId != null && schedule.getBus() != null && assignedBusId.equals(schedule.getBus().getId()));
+
+            if (!(matchesById || matchesByNumber || matchesBySchedule)) {
+                throw new BadRequestException("Driver not assigned to this bus");
+            }
+        }
+
+        // If conductor, validate assignment similarly
+        if (isConductor) {
+            // Validate that the accessed bus matches the schedule's bus and provided filters
+            boolean matchesById = (busId != null && schedule.getBus() != null && schedule.getBus().getId().equals(busId));
+            boolean matchesByNumber = (busNumber != null && !busNumber.isBlank() && schedule.getBus() != null && schedule.getBus().getBusNumber() != null && schedule.getBus().getBusNumber().equalsIgnoreCase(busNumber));
+            boolean matchesBySchedule = (schedule.getBus() != null);
+            if (!(matchesById || matchesByNumber || matchesBySchedule)) {
+                throw new BadRequestException("Conductor not assigned to this bus");
+            }
         }
 
         // Build seat statuses
@@ -431,8 +554,8 @@ public class ReservationService {
         }
 
     SeatAvailabilityDTO dto = new SeatAvailabilityDTO();
-        dto.setBusId(schedule.getBus().getId());
-        dto.setBusNumber(schedule.getBus().getBusNumber());
+    dto.setBusId(schedule.getBus().getId());
+    dto.setBusNumber(schedule.getBus().getBusNumber());
         dto.setScheduleId(schedule.getId());
         dto.setTotalSeats(totalSeats);
         // If passenger, hide seats that are not their own as AVAILABLE-only view
@@ -455,5 +578,62 @@ public class ReservationService {
         }
         dto.setSeats(seats);
         return dto;
+    }
+
+    /**
+     * Return seat details for a given schedule and seat number: reservation info and current state overlay.
+     */
+    public java.util.Map<String, Object> getSeatDetails(Long scheduleId, int seatNumber) {
+        Schedule schedule = scheduleRepo.findById(scheduleId)
+                .orElseThrow(() -> new NotFoundException("Schedule not found: " + scheduleId));
+        Reservation match = reservationRepo.findByScheduleId(scheduleId).stream()
+                .filter(r -> r.getSeatNumber() == seatNumber)
+                .findFirst().orElse(null);
+        SeatState state = seatStateRepo.findByScheduleAndSeatNumber(schedule, seatNumber).orElse(null);
+        java.util.Map<String,Object> resp = new java.util.HashMap<>();
+        resp.put("seatNumber", seatNumber);
+        resp.put("scheduleId", scheduleId);
+        if (match != null) {
+            resp.put("reserved", true);
+            resp.put("reservationId", match.getId());
+            resp.put("passengerName", match.getPassengerName());
+            resp.put("paid", match.isPaid());
+        } else {
+            resp.put("reserved", false);
+        }
+        resp.put("state", state != null ? state.getState() : null);
+        return resp;
+    }
+
+    /**
+     * Conductor-only: update a manual seat state overlay.
+     */
+    @Transactional
+    public void updateSeatState(Long scheduleId, int seatNumber, String state) {
+        if (state == null || state.isBlank()) throw new BadRequestException("state is required");
+        String normalized = state.toUpperCase();
+        java.util.Set<String> allowed = java.util.Set.of("AVAILABLE", "RESERVED", "PAID", "DISABLED");
+        if (!allowed.contains(normalized)) throw new BadRequestException("Invalid state");
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) throw new BadRequestException("Authentication required");
+        boolean isConductor = auth.getAuthorities().stream().anyMatch(a -> {
+            String role = a.getAuthority();
+            return role != null && role.contains("CONDUCTOR");
+        });
+        if (!isConductor) throw new BadRequestException("Only conductor can update seat state");
+
+        Schedule schedule = scheduleRepo.findById(scheduleId)
+                .orElseThrow(() -> new NotFoundException("Schedule not found: " + scheduleId));
+        SeatState seatState = seatStateRepo.findByScheduleAndSeatNumber(schedule, seatNumber)
+                .orElseGet(() -> {
+                    SeatState s = new SeatState();
+                    s.setSchedule(schedule);
+                    s.setSeatNumber(seatNumber);
+                    return s;
+                });
+        seatState.setState(normalized);
+        seatState.setUpdatedBy(auth.getName());
+        seatStateRepo.save(seatState);
     }
 }

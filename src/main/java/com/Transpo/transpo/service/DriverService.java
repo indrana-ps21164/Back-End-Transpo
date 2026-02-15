@@ -198,17 +198,25 @@ public class DriverService {
                 if (reservation.getPickupStop() != null && stopStats.containsKey(reservation.getPickupStop().getId())) {
                     Map<String, Object> stats = stopStats.get(reservation.getPickupStop().getId());
                     stats.put("pickupCount", (Integer) stats.get("pickupCount") + 1);
-                    ((java.util.List<String>) stats.get("pickupPassengers")).add(
-                            reservation.getPassengerName() + " (Seat: " + reservation.getSeatNumber() + ")"
-                    );
+                                                                Object ppObj = stats.get("pickupPassengers");
+                                                                java.util.List<String> list = new java.util.ArrayList<>();
+                                                                if (ppObj instanceof java.util.List<?>) {
+                                                                        for (Object o : (java.util.List<?>) ppObj) { list.add(String.valueOf(o)); }
+                                                                }
+                                                                list.add(reservation.getPassengerName() + " (Seat: " + reservation.getSeatNumber() + ")");
+                                                                stats.put("pickupPassengers", list);
                 }
                 
                 if (reservation.getDropStop() != null && stopStats.containsKey(reservation.getDropStop().getId())) {
                     Map<String, Object> stats = stopStats.get(reservation.getDropStop().getId());
                     stats.put("dropCount", (Integer) stats.get("dropCount") + 1);
-                    ((java.util.List<String>) stats.get("dropPassengers")).add(
-                            reservation.getPassengerName() + " (Seat: " + reservation.getSeatNumber() + ")"
-                    );
+                                                                Object dpObj = stats.get("dropPassengers");
+                                                                java.util.List<String> list2 = new java.util.ArrayList<>();
+                                                                if (dpObj instanceof java.util.List<?>) {
+                                                                        for (Object o : (java.util.List<?>) dpObj) { list2.add(String.valueOf(o)); }
+                                                                }
+                                                                list2.add(reservation.getPassengerName() + " (Seat: " + reservation.getSeatNumber() + ")");
+                                                                stats.put("dropPassengers", list2);
                 }
             }
         }
@@ -277,4 +285,85 @@ public class DriverService {
         
         return mapData;
     }
+
+        /**
+         * Driver-only: get pickup points for reservations of selected bus/schedule.
+         */
+        public List<Map<String, Object>> getPickupPointsForDriver(Long busId, String busNumber, Long scheduleId, String username) {
+                // Validate assignment
+                User driver = userRepository.findByUsername(username)
+                                .orElseThrow(() -> new NotFoundException("User not found: " + username));
+                DriverAssignment assignment = driverAssignmentRepo.findByDriverId(driver.getId())
+                                .orElseThrow(() -> new NotFoundException("Driver has no bus assignment"));
+                Bus assignedBus = assignment.getBus();
+                if (assignedBus == null) throw new BadRequestException("Driver not assigned to any bus");
+
+                boolean matchesById = (busId != null && assignedBus.getId().equals(busId));
+                boolean matchesByNumber = (busNumber != null && assignedBus.getBusNumber() != null && assignedBus.getBusNumber().equalsIgnoreCase(busNumber));
+
+                // Resolve schedule and confirm it belongs to the driver's bus
+                Schedule schedule = scheduleRepository.findById(scheduleId)
+                                .orElseThrow(() -> new NotFoundException("Schedule not found: " + scheduleId));
+                if (schedule.getBus() == null || !schedule.getBus().getId().equals(assignedBus.getId())) {
+                        throw new BadRequestException("Schedule does not belong to driver's assigned bus");
+                }
+                if (!(matchesById || matchesByNumber)) {
+                        // Still allow if schedule bus matches assigned bus
+                        if (!schedule.getBus().getId().equals(assignedBus.getId())) {
+                                throw new BadRequestException("Driver not assigned to this bus");
+                        }
+                }
+
+                // Gather reservations for schedule and map to pickup markers
+                List<Reservation> reservations = reservationRepository.findByScheduleId(schedule.getId());
+                List<Map<String, Object>> markers = new java.util.ArrayList<>();
+                for (Reservation r : reservations) {
+                        BusStop pickup = r.getPickupStop();
+                        if (pickup != null && pickup.getLatitude() != null && pickup.getLongitude() != null) {
+                                Map<String, Object> m = new HashMap<>();
+                                m.put("lat", pickup.getLatitude());
+                                m.put("lng", pickup.getLongitude());
+                                m.put("pickupName", pickup.getName());
+                                m.put("passengerName", r.getPassengerName());
+                                m.put("seatNumber", r.getSeatNumber());
+                                m.put("reservationId", r.getId());
+                                m.put("scheduleId", schedule.getId());
+                                m.put("busId", assignedBus.getId());
+                                m.put("busNumber", assignedBus.getBusNumber());
+                                markers.add(m);
+                        }
+                }
+                return markers;
+        }
+        /**
+         * Get reservations for the driver's assigned bus
+         */
+        public List<Map<String, Object>> getAssignedBusReservations() {
+                User driver = getCurrentDriver();
+                DriverAssignment assignment = driverAssignmentRepo.findByDriverId(driver.getId())
+                                .orElseThrow(() -> new NotFoundException("Driver has no bus assignment"));
+                Bus bus = assignment.getBus();
+                // Find schedules for this bus
+                List<Schedule> schedules = scheduleRepository.findAll().stream()
+                                .filter(s -> s.getBus().getId().equals(bus.getId()))
+                                .collect(Collectors.toList());
+                // Collect reservations across schedules
+                List<Map<String, Object>> results = new java.util.ArrayList<>();
+                for (Schedule schedule : schedules) {
+                        List<Reservation> reservations = reservationRepository.findByScheduleId(schedule.getId());
+                        for (Reservation r : reservations) {
+                                Map<String, Object> dto = new HashMap<>();
+                                dto.put("id", r.getId());
+                                dto.put("scheduleId", schedule.getId());
+                                dto.put("passengerName", r.getPassengerName());
+                                dto.put("passengerEmail", r.getPassengerEmail());
+                                dto.put("seatNumber", r.getSeatNumber());
+                                dto.put("bookingTime", r.getBookingTime());
+                                dto.put("busId", bus.getId());
+                                dto.put("busNumber", bus.getBusNumber());
+                                results.add(dto);
+                        }
+                }
+                return results;
+        }
 }

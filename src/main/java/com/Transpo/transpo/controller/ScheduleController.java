@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.time.LocalDateTime;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/schedules")
@@ -42,8 +44,22 @@ public class ScheduleController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ScheduleResponseDTO>> list() {
-        // Use custom query to get all schedules with details
+    public ResponseEntity<List<?>> list(@RequestParam(value = "busNumber", required = false) String busNumber) {
+        // If busNumber specified, return only future schedules for that bus as minimal objects
+        if (busNumber != null && !busNumber.isBlank()) {
+            LocalDateTime now = LocalDateTime.now();
+            // Use the DTO-based repository method and filter by bus number and future departure time
+            List<ScheduleResponseDTO> all = scheduleRepository.findAllScheduleDetails();
+            List<?> minimal = all.stream()
+                    .filter(d -> d.getDepartureTime() != null && d.getDepartureTime().isAfter(now) && busNumber.equals(d.getBusNumber()))
+                    .map(d -> java.util.Map.of(
+                            "id", d.getId(),
+                            "departureTime", d.getDepartureTime()
+                    ))
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(minimal);
+        }
+        // Otherwise, return all schedules with details
         List<ScheduleResponseDTO> dtos = scheduleRepository.findAllScheduleDetails();
         return ResponseEntity.ok(dtos);
     }

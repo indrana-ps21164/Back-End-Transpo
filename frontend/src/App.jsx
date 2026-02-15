@@ -3,26 +3,128 @@ import AdminDashboard from './components/AdminDashboard';
 import { whoami } from './api/auth';
 import SeatAvailability from './components/SeatAvailability';
 import './App.css';
+// Role-based menu config and helpers
+const MENU_CONFIG = {
+  DRIVER: [
+    { path: '/', label: 'Dashboard' },
+    { path: '/schedules', label: 'Schedules' },
+    { path: '/reservations', label: 'Reservations' },
+    { path: '/seat-availability', label: 'Seat Availability' },
+    { path: '/driver', label: 'Driver' },
+  ],
+  PASSENGER: [
+    { path: '/', label: 'Dashboard' },
+    { path: '/reservations', label: 'Reservations' },
+    { path: '/seat-availability', label: 'Seat Availability' },
+  ],
+  CONDUCTOR: [
+    { path: '/', label: 'Dashboard' },
+    { path: '/schedules', label: 'Schedules' },
+    { path: '/reservations', label: 'Reservations' },
+    { path: '/seat-availability', label: 'Seat Availability' },
+  ],
+  ADMIN: [
+    { path: '/', label: 'Dashboard' },
+    { path: '/admin', label: 'Admin' },
+    { path: '/buses', label: 'Buses' },
+    { path: '/routes', label: 'Routes' },
+    { path: '/schedules', label: 'Schedules' },
+    { path: '/reservations', label: 'Reservations' },
+  ],
+};
+const getStoredRole = () => sessionStorage.getItem('role') || localStorage.getItem('role') || null;
+const setStoredRole = (role) => { sessionStorage.setItem('role', role); localStorage.setItem('role', role); };
+const clearStoredRole = () => { sessionStorage.removeItem('role'); localStorage.removeItem('role'); };
+
+function AccessDenied() {
+  return (
+    <div style={{ padding: '1rem' }}>
+      <h2>Access Denied</h2>
+      <p>You do not have permission to view this page.</p>
+      <Link to="/">Go to Dashboard</Link>
+    </div>
+  );
+}
 
 // Simple auth util
 const isAuthed = () => !!localStorage.getItem('token');
 function SeatAvailabilityPageWrapper() {
   const [me, setMe] = useState(null);
   useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
-  const [busId, setBusId] = useState('');
+  const [busNumber, setBusNumber] = useState('');
   const [scheduleId, setScheduleId] = useState('');
+  const [busList, setBusList] = useState([]);
+  const [busLoading, setBusLoading] = useState(false);
+  const [busError, setBusError] = useState('');
+  const [times, setTimes] = useState([]);
+  const [timesLoading, setTimesLoading] = useState(false);
+  const [timesError, setTimesError] = useState('');
   const role = me?.role || 'PASSENGER';
   const username = me?.username || '';
+  // Load buses (drivers see only their assigned bus; others see all)
+  useEffect(() => {
+    (async () => {
+      try {
+        setBusLoading(true); setBusError('');
+        const res = await fetch('/api/buses');
+        const data = await res.json();
+        const items = Array.isArray(data) ? data : (data?.content ?? []);
+        let options = (items || [])
+          .filter(b => b && (b.busNumber || b.number))
+          .map(b => ({ id: b.id, busNumber: b.busNumber || b.number }));
+        // If driver, reduce to assigned bus only
+        if (me?.role === 'DRIVER') {
+          const assignedNumber = me?.assignedBusNumber || null;
+          const assignedId = me?.assignedBusId || null;
+          options = options.filter(o =>
+            (assignedNumber && o.busNumber === assignedNumber) || (assignedId && o.id === assignedId)
+          );
+        }
+        setBusList(options);
+      } catch (e) {
+        setBusError('Failed to load buses'); setBusList([]);
+      } finally { setBusLoading(false); }
+    })();
+  }, []);
+
+  // Load times when bus changes
+  useEffect(() => {
+    (async () => {
+      if (!busNumber) { setTimes([]); setScheduleId(''); return; }
+      try {
+        setTimesLoading(true); setTimesError('');
+        const res = await fetch(`/api/schedules?busNumber=${encodeURIComponent(busNumber)}`);
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        setTimes(list);
+        setScheduleId('');
+      } catch (e) {
+        setTimesError('Failed to load departure times'); setTimes([]); setScheduleId('');
+      } finally { setTimesLoading(false); }
+    })();
+  }, [busNumber]);
+
   return (
     <div style={{ padding: '1rem' }}>
       <h2>Seat Availability</h2>
-      <p style={{ color: '#555' }}>View seat grid. Enter Bus ID and optional Schedule ID.</p>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input placeholder="Bus ID" value={busId} onChange={e => setBusId(e.target.value)} />
-        <input placeholder="Schedule ID (optional)" value={scheduleId} onChange={e => setScheduleId(e.target.value)} />
+      <p style={{ color: '#555' }}>Select Bus Number and Departure Time to view seats.</p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <select value={busNumber} onChange={e => setBusNumber(e.target.value)} disabled={busLoading || busList.length === 0}>
+          <option value="">{busLoading ? 'Loading buses…' : busList.length === 0 ? 'No buses available' : 'Select Bus Number'}</option>
+          {busList.map(b => (
+            <option key={b.id} value={b.busNumber}>{b.busNumber}</option>
+          ))}
+        </select>
+        <select disabled={!busNumber || timesLoading || times.length === 0} value={scheduleId} onChange={e => setScheduleId(e.target.value)}>
+          <option value="">{timesLoading ? 'Loading times…' : times.length === 0 ? 'No departure times' : 'Select Departure Time'}</option>
+          {times.map(t => (
+            <option key={t.id} value={t.id}>{String(t.departureTime).replace('T',' ')}</option>
+          ))}
+        </select>
       </div>
-      {busId ? (
-        <SeatAvailability busId={Number(busId)} scheduleId={scheduleId ? Number(scheduleId) : undefined} role={role} username={username} />
+      {(busError || timesError) && <div style={{ color: 'red', marginBottom: 8 }}>{busError || timesError}</div>}
+      {busNumber && scheduleId ? (
+        <SeatAvailability busNumber={busNumber} scheduleId={Number(scheduleId)} role={role} username={username} />
       ) : (
         <div style={{ border: '1px dashed #ccc', padding: '1rem', borderRadius: 8 }}>
           <strong>Placeholder:</strong> Seat grid will appear here.
@@ -34,29 +136,167 @@ function SeatAvailabilityPageWrapper() {
 
 const Layout = ({ children }) => {
   const [me, setMe] = useState(null);
-  useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
-  const isAdmin = me?.role === 'ADMIN';
-  const isConductor = me?.role === 'CONDUCTOR';
+  const [role, setRole] = useState(getStoredRole());
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editMsg, setEditMsg] = useState('');
+  const [editErr, setEditErr] = useState('');
+  const [profileForm, setProfileForm] = useState({ username: '', password: '', role: '', assignedBusId: '' });
+  useEffect(() => {
+    (async () => {
+      try {
+        const m = await whoami();
+        setMe(m);
+        if (m?.role) { setRole(m.role); setStoredRole(m.role); }
+      } catch {}
+    })();
+  }, []);
+  const authed = isAuthed();
+  const menus = role && MENU_CONFIG[role] ? MENU_CONFIG[role] : [];
+  const onLogout = () => { localStorage.removeItem('token'); clearStoredRole(); window.location.href = '/login'; };
   return (
     <div className="container">
       <nav className="nav">
-        <Link to="/">Dashboard</Link>
-        {isAdmin && <Link to="/admin">Admin</Link>}
-        <Link to="/buses">Buses</Link>
-        <Link to="/routes">Routes</Link>
-        <Link to="/schedules">Schedules</Link>
-        <Link to="/reservations">Reservations</Link>
-  <Link to="/driver">Driver</Link>
-  <Link to="/seat-availability">Seat Availability</Link>
-        <Link to="/login" style={{ marginLeft: 'auto' }}>Login</Link>
+        {authed ? (
+          <>
+            {menus.map((m) => (<Link key={m.path} to={m.path}>{m.label}</Link>))}
+            <div style={{ marginLeft: 'auto', position: 'relative' }}>
+              <button
+                aria-label="Profile"
+                title="Profile"
+                onClick={() => setProfileOpen((v) => !v)}
+                style={{
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px'
+                }}
+              >
+                <span style={{
+                  width: 28, height: 28, borderRadius: '50%', background: '#0078d4', color: '#fff',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600
+                }}>
+                  {(me?.username || '?').slice(0,1).toUpperCase()}
+                </span>
+                <span style={{ fontSize: '.9rem', color: '#333' }}>{me?.username || 'User'}</span>
+              </button>
+              {profileOpen && (
+                <div
+                  style={{
+                    position: 'absolute', right: 0, top: '110%', background: '#fff', border: '1px solid #ddd',
+                    borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 260, zIndex: 10
+                  }}
+                >
+                  <div style={{ padding: '0.75rem', borderBottom: '1px solid #eee' }}>
+                    <div style={{ fontWeight: 600 }}>{me?.username || '—'}</div>
+                    <div style={{ fontSize: '.85rem', color: '#555' }}>Role: {me?.role || '—'}</div>
+                    {me?.email && (<div style={{ fontSize: '.85rem', color: '#555' }}>Email: {me.email}</div>)}
+                    {me?.assignedBusNumber && (
+                      <div style={{ fontSize: '.85rem', color: '#555' }}>Assigned Bus: {me.assignedBusNumber}</div>
+                    )}
+                    {me?.assignedBusName && (
+                      <div style={{ fontSize: '.85rem', color: '#555' }}>Bus Name: {me.assignedBusName}</div>
+                    )}
+                  </div>
+                  <div style={{ padding: '0.5rem', display: 'grid', gap: 8 }}>
+                    <button onClick={() => setProfileOpen(false)}>View Profile</button>
+                    <button onClick={() => {
+                      setProfileOpen(false);
+                      setEditMsg(''); setEditErr('');
+                      setProfileForm({
+                        username: me?.username || '',
+                        password: '',
+                        role: me?.role || '',
+                        assignedBusId: ''
+                      });
+                      setEditOpen(true);
+                    }}>Edit Profile</button>
+                    <button onClick={onLogout} style={{ width: '100%' }}>Logout</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <Link to="/login">Login</Link>
+            <Link to="/register" style={{ marginLeft: '0.5rem' }}>Register</Link>
+          </>
+        )}
       </nav>
       <main>{children}</main>
+      {editOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 10, width: 'min(560px, 92vw)', padding: '1rem', boxShadow: '0 10px 24px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Edit Profile</h3>
+              <button onClick={() => setEditOpen(false)} aria-label="Close">✕</button>
+            </div>
+            {editMsg && <p style={{ color: 'green' }}>{editMsg}</p>}
+            {editErr && <p style={{ color: 'red' }}>{editErr}</p>}
+            <div className="form" style={{ flexWrap: 'wrap' }}>
+              <input placeholder="Username" value={profileForm.username} onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })} />
+              <input placeholder="New Password" type="password" value={profileForm.password} onChange={(e) => setProfileForm({ ...profileForm, password: e.target.value })} />
+              {/* Role editable only for Admin */}
+              {role === 'ADMIN' && (
+                <select value={profileForm.role} onChange={(e) => setProfileForm({ ...profileForm, role: e.target.value })}>
+                  <option value="">Role (keep)</option>
+                  <option value="PASSENGER">Passenger</option>
+                  <option value="CONDUCTOR">Conductor</option>
+                  <option value="DRIVER">Driver</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              )}
+              {/* Assigned Bus only for Driver/Conductor; enter ID to change */}
+              {(role === 'DRIVER' || role === 'CONDUCTOR') && (
+                <input placeholder="Assigned Bus ID" value={profileForm.assignedBusId} onChange={(e) => setProfileForm({ ...profileForm, assignedBusId: e.target.value.replace(/[^0-9]/g, '') })} />
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={async () => {
+                  setEditMsg(''); setEditErr('');
+                  // Basic password validation
+                  if (profileForm.password && profileForm.password.length < 6) {
+                    setEditErr('Password too short');
+                    return;
+                  }
+                  try {
+                    const payload = { username: profileForm.username };
+                    if (profileForm.password) payload.password = profileForm.password;
+                    if (role === 'ADMIN' && profileForm.role) payload.role = profileForm.role;
+                    if ((role === 'DRIVER' || role === 'CONDUCTOR') && profileForm.assignedBusId) payload.assignedBusId = profileForm.assignedBusId;
+                    const res = await updateProfile(payload);
+                    setEditMsg(res?.message || 'Profile updated');
+                    // Refresh me
+                    try { const m = await whoami(); setMe(m); if (m?.role) { setRole(m.role); setStoredRole(m.role); } } catch {}
+                  } catch (e) {
+                    setEditErr(e?.response?.data?.error || 'Failed to update');
+                  }
+                }}>Save</button>
+                <button onClick={() => setEditOpen(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 const RequireAuth = ({ children }) => {
   if (!isAuthed()) return <Navigate to="/login" replace />;
+  return children;
+};
+
+const RequireRole = ({ role, children }) => {
+  const current = getStoredRole();
+  if (!isAuthed()) return <Navigate to="/login" replace />;
+  if (!current || current !== role) return <Navigate to="/access-denied" replace />;
+  return children;
+};
+
+// Allow multiple roles to access a route
+const RequireAnyRole = ({ roles, children }) => {
+  const current = getStoredRole();
+  if (!isAuthed()) return <Navigate to="/login" replace />;
+  if (!current || !Array.isArray(roles) || !roles.includes(current)) return <Navigate to="/access-denied" replace />;
   return children;
 };
 
@@ -71,20 +311,21 @@ export default function App() {
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="/seat-availability" element={<SeatAvailabilityPageWrapper />} />
+          <Route path="/seat-availability" element={<RequireAnyRole roles={["DRIVER","PASSENGER","CONDUCTOR"]}><SeatAvailabilityPageWrapper /></RequireAnyRole>} />
 
-        
-          <Route path="/buses" element={<RequireAuth><BusesPage /></RequireAuth>} />
-          <Route path="/routes" element={<RequireAuth><RoutesPage /></RequireAuth>} />
-          <Route path="/schedules" element={<RequireAuth><SchedulesPage /></RequireAuth>} />
+          <Route path="/buses" element={<RequireRole role="ADMIN"><BusesPage /></RequireRole>} />
+          <Route path="/routes" element={<RequireRole role="ADMIN"><RoutesPage /></RequireRole>} />
+          <Route path="/schedules" element={<RequireAnyRole roles={["DRIVER","CONDUCTOR","ADMIN"]}><SchedulesPage /></RequireAnyRole>} />
           <Route path="/reservations" element={<RequireAuth><ReservationsPage /></RequireAuth>} />
           <Route path="/map" element={<RequireAuth><MapPage /></RequireAuth>} />
-          <Route path="/driver" element={<RequireAuth><DriverDashboard /></RequireAuth>} />
-          <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
-          <Route path="/conductor" element={<RequireAuth><ConductorDashboard /></RequireAuth>} />
+          <Route path="/driver" element={<RequireRole role="DRIVER"><DriverDashboard /></RequireRole>} />
+          <Route path="/admin" element={<RequireRole role="ADMIN"><AdminDashboard /></RequireRole>} />
+          <Route path="/conductor" element={<RequireRole role="CONDUCTOR"><ConductorDashboard /></RequireRole>} />
+          <Route path="/access-denied" element={<AccessDenied />} />
+          <Route path="*" element={<Navigate to={isAuthed() ? '/' : '/login'} replace />} />
         </Routes>
       </Layout>
     </BrowserRouter>
@@ -112,11 +353,97 @@ import {
   deleteReservation,
   getMapData,
   getReservationsByUser,
+  getAdminBuses,
+  getDriverBusReservations,
 } from './api/resources';
+// Payment validation API client
+async function validatePayment(payload) {
+  const res = await fetch('/api/payments/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Payment validation failed');
+  return res.json();
+}
+
+function PaymentPortal({ open, onClose, onAuthorized }) {
+  const [paymentNumber, setPaymentNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvv, setCvv] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  if (!open) return null;
+  const handlePurchase = async () => {
+    setError('');
+    // Required checks
+    if (!paymentNumber || !expiry || !cvv) {
+      setError('All fields are required');
+      return;
+    }
+    if (!/^\d{16}$/.test(paymentNumber.replace(/\s+/g, ''))) {
+      setError('Payment number must be 16 digits');
+      return;
+    }
+    if (!/^\d{3}$/.test(cvv)) {
+      setError('Security key (CVV) must be 3 digits');
+      return;
+    }
+    setLoading(true);
+    try {
+      const resp = await validatePayment({ paymentNumber, expiry, cvv });
+      if (resp?.valid) {
+        onAuthorized({ paymentNumber, expiry, cvv, message: resp?.message });
+        onClose();
+      } else {
+        setError(resp?.message || 'Payment declined');
+      }
+    } catch (e) {
+      setError(e?.message || 'Payment failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: 'min(860px, 94vw)', padding: '1rem', boxShadow: '0 12px 28px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div style={{ background: 'linear-gradient(135deg,#0f62fe,#4589ff)', color: '#fff', borderRadius: 12, padding: '1rem', minHeight: 220, position: 'relative' }}>
+            <div style={{ fontWeight: 600, fontSize: '1rem' }}>Transpo Card</div>
+            <div style={{ marginTop: '1.25rem', letterSpacing: 2, fontSize: '1.1rem' }}>{paymentNumber || '•••• •••• •••• ••••'}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.9rem' }}>
+              <div>Expiry: {expiry || 'MM/YY'}</div>
+              <div>CVV: {cvv || '***'}</div>
+            </div>
+            <div style={{ position: 'absolute', bottom: 12, right: 12, fontSize: '.8rem', opacity: 0.9 }}>Secure • PCI</div>
+          </div>
+          <div>
+            <h3 style={{ margin: 0 }}>Payment Details</h3>
+            {error && <p style={{ color: 'red', marginTop: '.25rem' }}>{error}</p>}
+            <div className="form" style={{ flexWrap: 'wrap' }}>
+              <input required placeholder="Payment Number (16 digits)" value={paymentNumber} onChange={e => setPaymentNumber(e.target.value.replace(/[^\d\s]/g, ''))} />
+              <input required placeholder="Expiry (MM/YY or MM/YYYY)" value={expiry} onChange={e => setExpiry(e.target.value)} />
+              <input required placeholder="Security Key (CVV)" value={cvv} onChange={e => setCvv(e.target.value.replace(/[^0-9]/g, ''))} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handlePurchase} disabled={loading}>
+                  {loading ? 'Processing…' : 'Purchase'}
+                </button>
+                <button onClick={onClose} disabled={loading}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 // Driver dashboard with live map
 function DriverDashboard() {
   const [me, setMe] = useState(null);
   const [bus, setBus] = useState(null);
+  const [busLoading, setBusLoading] = useState(true);
   const [newBusId, setNewBusId] = useState('');
   const [lat, setLat] = useState(null);
   const [lng, setLng] = useState(null);
@@ -127,10 +454,39 @@ function DriverDashboard() {
       try {
         const m = await whoami();
         setMe(m);
+        setBusLoading(true);
         const b = await fetchDriverBus();
-        setBus(b);
+        // If response is empty or missing key fields, attempt to resolve via admin buses
+        if (!b || (!b.busNumber && !b.number && !b.assignedBusNumber && !(b.bus && (b.bus.busNumber || b.bus.number)))) {
+          try {
+            const adminBuses = await getAdminBuses();
+            // Find bus where assigned driver username matches current user
+            const found = (adminBuses || []).find((entry) => {
+              const assignedDriver = entry.assignedDriver || entry.driver || entry.assignment?.driver;
+              const username = assignedDriver?.username || assignedDriver?.name || assignedDriver;
+              return username && m?.username && String(username) === String(m.username);
+            });
+            if (found) {
+              setBus({
+                id: found.id,
+                busNumber: found.busNumber || found.number,
+                busName: found.busName || found.name,
+              });
+            } else {
+              setBus(b);
+            }
+          } catch {
+            setBus(b);
+          }
+        } else {
+          setBus(b);
+        }
         await refreshLocation();
-      } catch {}
+      } catch (e) {
+        // On error, clear loading to show fallback text
+      } finally {
+        setBusLoading(false);
+      }
     })();
     const id = setInterval(refreshLocation, 5000);
     return () => clearInterval(id);
@@ -166,27 +522,26 @@ function DriverDashboard() {
     <div>
       <h2>Driver Dashboard</h2>
       <p><strong>User:</strong> {me?.username} ({me?.role})</p>
-      <p><strong>Bus:</strong> {bus ? `${bus.busNumber} - ${bus.busName}` : 'No bus assigned'}</p>
+      {(busLoading || (bus && (bus.busNumber || bus.number || bus.assignedBusNumber || bus.bus?.busNumber || bus.bus?.number))) && (
+        <p>
+          <strong>Bus:</strong>{' '}
+          {busLoading ? (
+            'Loading bus details…'
+          ) : (
+            `${bus.busNumber || bus.number || bus.assignedBusNumber || bus.bus?.busNumber || bus.bus?.number} - ${bus.busName || bus.name || bus.assignedBusName || bus.bus?.busName || bus.bus?.name || ''}`
+          )}
+        </p>
+      )}
       <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.5rem' }}>
         <button onClick={sendLocationFromBrowser}>Update My Live Location</button>
         <button onClick={refreshLocation}>Refresh</button>
       </div>
-      <div className="form" style={{ gap: '.5rem', marginBottom: '.5rem' }}>
-        <label><strong>Change Assigned Bus ID</strong></label>
-        <input type="number" value={newBusId} onChange={(e) => setNewBusId(e.target.value)} placeholder="Bus ID" />
-        <button onClick={async () => {
-          if (!newBusId) return;
-          try {
-            const updated = await changeDriverBus(Number(newBusId));
-            setBus(updated);
-            setMsg('Assigned bus updated');
-          } catch (e) {
-            setMsg(e?.response?.data?.message || 'Failed to change bus');
-          }
-        }}>Change Bus</button>
-      </div>
+  {/* Removed Change Assigned Bus ID section per request */}
       {msg && <p>{msg}</p>}
       <LiveMap lat={lat} lng={lng} />
+      <div style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
+        <DriverPickupMap />
+      </div>
     </div>
   );
 }
@@ -219,6 +574,114 @@ function LiveMap({ lat, lng }) {
     })();
   }, [mapEl, lat, lng]);
   return <div ref={setMapEl} style={{ height: 400, border: '1px solid #ddd' }} />;
+}
+// Driver: Pickup points map with bus + schedule selection
+import { getSeatAvailability } from './api/resources';
+function DriverPickupMap() {
+  const [me, setMe] = useState(null);
+  const [busOptions, setBusOptions] = useState([]);
+  const [busNumber, setBusNumber] = useState('');
+  const [times, setTimes] = useState([]);
+  const [scheduleId, setScheduleId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [markers, setMarkers] = useState([]);
+  const [mapEl, setMapEl] = useState(null);
+
+  useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
+  // Load assigned bus only for driver
+  useEffect(() => { (async () => {
+    try {
+      const b = await fetch('/api/driver/my-bus');
+      const data = await b.json();
+      const bn = data?.busNumber || data?.number;
+      const id = data?.id || data?.bus?.id;
+      const opts = bn ? [{ id, busNumber: bn }] : [];
+      setBusOptions(opts);
+      setBusNumber(bn || '');
+    } catch (e) { setError('Failed to load assigned bus'); }
+  })(); }, []);
+
+  // Load times for selected bus
+  useEffect(() => { (async () => {
+    setTimes([]); setScheduleId('');
+    if (!busNumber) return;
+    try {
+      const res = await fetch(`/api/schedules?busNumber=${encodeURIComponent(busNumber)}`);
+      const data = await res.json();
+      setTimes(Array.isArray(data) ? data : []);
+    } catch (e) { setError('Failed to load schedules'); }
+  })(); }, [busNumber]);
+
+  // Fetch pickup markers when schedule changes
+  useEffect(() => { (async () => {
+    if (!scheduleId || !busNumber) { setMarkers([]); return; }
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(`/api/driver/pickups?scheduleId=${scheduleId}&busNumber=${encodeURIComponent(busNumber)}`);
+      const data = await res.json();
+      setMarkers(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to load pickup points');
+      setMarkers([]);
+    } finally { setLoading(false); }
+  })(); }, [scheduleId, busNumber]);
+
+  // Render Leaflet map
+  useEffect(() => { (async () => {
+    if (!mapEl) return;
+    const id = 'leaflet-css';
+    if (!document.getElementById(id)) {
+      const link = document.createElement('link');
+      link.id = id; link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    const Lmod = await import('leaflet');
+    const L = Lmod.default || Lmod;
+    const map = L.map(mapEl, { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    const bounds = [];
+    (markers || []).forEach(m => {
+      if (m.lat != null && m.lng != null) {
+        const latlng = [m.lat, m.lng];
+        bounds.push(latlng);
+        const mk = L.marker(latlng).addTo(map);
+        const name = m.passengerName || 'Passenger';
+        const seat = m.seatNumber != null ? `Seat ${m.seatNumber}` : '';
+        const stop = m.pickupName || 'Pickup';
+        mk.bindPopup(`<b>${name}</b><br/>${seat}<br/>${stop}`);
+      }
+    });
+    if (bounds.length > 0) {
+      map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20] });
+    } else {
+      map.setView([6.9271, 79.8612], 11);
+    }
+  })(); }, [mapEl, markers]);
+
+  if (me && me.role !== 'DRIVER') return null;
+
+  return (
+    <div>
+      <h3>Pickup Points Map</h3>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <select value={busNumber} onChange={e => setBusNumber(e.target.value)} disabled={!busOptions.length}>
+          <option value="">{!busOptions.length ? 'No assigned bus' : 'Select Bus Number'}</option>
+          {busOptions.map(b => (<option key={b.id} value={b.busNumber}>{b.busNumber}</option>))}
+        </select>
+        <select value={scheduleId} onChange={e => setScheduleId(e.target.value)} disabled={!busNumber || !times.length}>
+          <option value="">{!busNumber ? 'Select bus first' : (!times.length ? 'No departure times' : 'Select Departure Time')}</option>
+          {times.map(t => (<option key={t.id} value={t.id}>{String(t.departureTime).replace('T',' ')}</option>))}
+        </select>
+      </div>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {!loading && markers.length === 0 && scheduleId && (
+        <p style={{ color: '#666' }}>No reservations found or no pickup points available.</p>
+      )}
+      <div ref={setMapEl} style={{ height: 420, border: '1px solid #ddd', borderRadius: 8 }} />
+    </div>
+  );
 }
 // Passenger dashboard components moved to components/PassengerDashboard.jsx to avoid scope collisions
 // (Old DashboardMap removed to avoid duplicate identifiers)
@@ -266,7 +729,9 @@ function LoginPage() {
     try {
       const data = await login(username, password);
       // Backend returns message/username/roles; no token. Store username as session marker.
-      localStorage.setItem('token', data.username || '');
+  localStorage.setItem('token', data.username || '');
+  const role = (data?.roles?.[0] || data?.role || '').toUpperCase();
+  if (role) setStoredRole(role);
       window.location.href = '/';
     } catch (err) {
   const resp = err?.response?.data;
@@ -306,6 +771,8 @@ function RegisterPage() {
       setLoading(true);
       const data = await register(payload);
       setMsg(data.message || 'Registered');
+  const role = (payload.role || '').toUpperCase();
+  if (role) setStoredRole(role);
     } catch (err) {
       const resp = err?.response?.data;
       setError(resp?.error || resp?.message || 'Registration failed');
@@ -346,10 +813,7 @@ function BusesPage() {
       try {
         const data = await getBuses();
         setItems(Array.isArray(data) ? data : (data?.content ?? []));
-        try {
-          const me = await whoami();
-          setIsAdmin(me?.role === 'ADMIN');
-        } catch {}
+        try { const me = await whoami(); setIsAdmin(me?.role === 'ADMIN'); } catch {}
       } catch (err) {
         setError(err?.response?.data?.message || 'Failed to load buses');
       } finally {
@@ -641,8 +1105,7 @@ function SchedulesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [pickup, setPickup] = useState('');
-  const [drop, setDrop] = useState('');
+  const [busQuery, setBusQuery] = useState('');
   const [newSchedule, setNewSchedule] = useState({ departureTime: '', busId: '', routeId: '' });
 
   useState(() => { (async () => {
@@ -662,16 +1125,11 @@ function SchedulesPage() {
     setItems(Array.isArray(data) ? data : (data?.content ?? []));
   };
 
-  const onSearch = async () => {
-    setError('');
-    try {
-      const data = await searchSchedules(pickup, drop);
-      setItems(data || []);
-      setLoading(false);
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Search failed');
-    }
-  };
+  // Client-side filtering by bus number (case-insensitive, partial match)
+  const filteredItems = (items || []).filter((s) => {
+    const busNumber = (s.busNumber || s.bus?.number || s.bus?.busNumber || '').toString();
+    return busNumber.toLowerCase().includes(busQuery.trim().toLowerCase());
+  });
 
   const handleScheduleChange = (id, field, value) => {
     setItems(prev => prev.map(s => (s.id === id ? { ...s, [field]: value } : s)));
@@ -680,7 +1138,7 @@ function SchedulesPage() {
   if (loading) return <p>Loading...</p>;
   if (error) return <p style={{ color: 'red' }}>{error}</p>;
 
-  const groups = items.reduce((acc, s) => {
+  const groups = filteredItems.reduce((acc, s) => {
     const key = s.routeName || s.route?.name || s.routeId || 'Route';
     (acc[key] ||= []).push(s);
     return acc;
@@ -690,9 +1148,8 @@ function SchedulesPage() {
     <div>
       <h2>Schedules</h2>
       <div className="form" style={{ marginBottom: '1rem' }}>
-        <input placeholder="Pickup point" value={pickup} onChange={(e) => setPickup(e.target.value)} />
-        <input placeholder="Drop point" value={drop} onChange={(e) => setDrop(e.target.value)} />
-        <button onClick={onSearch}>Search</button>
+        <label><strong>Search by Bus Number</strong></label>
+        <input placeholder="Search by Bus Number" value={busQuery} onChange={(e) => setBusQuery(e.target.value)} />
       </div>
 
       {isAdmin && (
@@ -774,6 +1231,8 @@ function SchedulesPage() {
 function ReservationsPage() {
   const navigate = useNavigate();
   const [mine, setMine] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [busReservations, setBusReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -785,6 +1244,9 @@ function ReservationsPage() {
   const [dropStop, setDropStop] = useState('');
   const [paymentNumber, setPaymentNumber] = useState('');
   const [securityKey, setSecurityKey] = useState('');
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [role, setRole] = useState(getStoredRole());
+  const [driverBus, setDriverBus] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -794,7 +1256,31 @@ function ReservationsPage() {
         setSuccess('');
         const me = localStorage.getItem('token');
         if (me) {
-          try { setMine(await getReservationsByUser(me)); } catch {}
+          // Auto-fill passenger name from logged-in user
+          setPassengerName(prev => prev && prev.length > 0 ? prev : me);
+          // Load my reservations via backend filter
+          try {
+            const resp = await fetch('/api/reservations/my');
+            const data = await resp.json();
+            setMine(Array.isArray(data) ? data : (data?.content ?? []));
+          } catch {}
+          // Load my reservation history
+          try {
+            const hResp = await fetch('/api/reservations/history');
+            const hData = await hResp.json();
+            setHistory(Array.isArray(hData) ? hData : (hData?.content ?? []));
+          } catch {}
+        }
+        // Load role and driver bus for Bus Reservations section
+        const currentRole = getStoredRole();
+        setRole(currentRole);
+        if (currentRole === 'DRIVER') {
+          try {
+            const bus = await fetchDriverBus();
+            setDriverBus(bus);
+            const driverRes = await getDriverBusReservations();
+            setBusReservations(Array.isArray(driverRes) ? driverRes : (driverRes?.content ?? []));
+          } catch {}
         }
         // Prefill from query params
         const params = new URLSearchParams(window.location.search);
@@ -816,33 +1302,33 @@ function ReservationsPage() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    // Validate fake payment inputs
-    if (!/^\d{10}$/.test(paymentNumber)) {
-      setError('Payment number must be 10 digits.');
-      return;
-    }
-    if (!/^\d{3}$/.test(securityKey)) {
-      setError('Security key must be 3 digits.');
-      return;
-    }
+    // Open payment portal first; booking proceeds after authorization
+    setPaymentOpen(true);
+  };
+
+  const onPaymentAuthorized = async ({ paymentNumber, expiry, cvv }) => {
     try {
       await createReservation({
         scheduleId: Number(scheduleId),
         passengerName,
         passengerEmail,
         seatNumber: Number(seatNumber),
-        // Pass pickup/drop names; backend may map to stop IDs
         pickup: pickupStop,
         drop: dropStop,
-        status: 'BOOKED',
+        status: 'PAID',
+        paymentMethod: 'CARD',
+        paymentReference: `${paymentNumber.slice(-4)}-${expiry}`,
       });
-      const me = localStorage.getItem('token');
-      if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
-      setSuccess('Reservation successful. Seat booked.');
-      // Clear only payment inputs; keep schedule/pickup/drop visible
+      try {
+        const resp = await fetch('/api/reservations/my');
+        const data = await resp.json();
+        setMine(Array.isArray(data) ? data : (data?.content ?? []));
+      } catch {}
+      setSuccess('Payment successful. Seat booked.');
       setPaymentNumber(''); setSecurityKey('');
+      window.dispatchEvent(new CustomEvent('seat-availability-updated'));
     } catch (e) {
-      setError(e?.response?.data?.message || e?.message || 'Failed to create reservation');
+      setError(e?.response?.data?.message || e?.message || 'Failed to create reservation after payment');
     }
   };
 
@@ -863,6 +1349,7 @@ function ReservationsPage() {
 
   return (
     <div>
+  <PaymentPortal open={paymentOpen} onClose={() => setPaymentOpen(false)} onAuthorized={onPaymentAuthorized} />
       <h2>Reservations</h2>
       <div style={{ marginBottom: '.5rem' }}>
         <button onClick={handleGoBack}>Go Back</button>
@@ -876,53 +1363,134 @@ function ReservationsPage() {
         <input placeholder="Seat Number" type="number" value={seatNumber} onChange={(e) => setSeatNumber(e.target.value)} />
         <input placeholder="Pickup Stop" value={pickupStop} onChange={(e) => setPickupStop(e.target.value)} />
         <input placeholder="Drop Stop" value={dropStop} onChange={(e) => setDropStop(e.target.value)} />
-        {/* Fake payment section */}
-        <input placeholder="Payment Number (10 digits)" value={paymentNumber} onChange={(e) => setPaymentNumber(e.target.value.replace(/[^0-9]/g, ''))} />
-        <input placeholder="Security Key (3 digits)" value={securityKey} onChange={(e) => setSecurityKey(e.target.value.replace(/[^0-9]/g, ''))} />
-        <button type="submit">Create</button>
+  {/* Payment trigger (portal will collect number/expiry/cvv) */}
+  <input required placeholder="Phone Number" value={paymentNumber} onChange={(e) => setPaymentNumber(e.target.value.replace(/[^0-9]/g, ''))} />
+  <button type="submit">Book / Pay</button>
       </form>
 
-      <h3>My Reservations</h3>
-      {mine && mine.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
-          {mine.map((r) => (
-            <div
-              key={r.id}
-              style={{
-                border: '1px solid #ddd',
-                borderRadius: 8,
-                padding: '0.75rem 1rem',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                background: '#fafafa',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                <strong>Reservation #{r.id}</strong>
-                <span style={{ fontSize: '.8rem', color: '#666' }}>
-                  Seat {r.seatNumber}
-                </span>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', alignItems: 'start' }}>
+        <div>
+          <h3>My Reservations</h3>
+          {mine && mine.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
+              {mine.map((r) => (
+                <div key={r.id} style={{ border: '1px solid #ddd', borderRadius: 10, padding: '0.9rem', background: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong>#{r.id}</strong>
+                <span style={{ fontSize: '.8rem', color: r.status === 'PAID' ? '#1e88e5' : '#e53935' }}>{r.status || 'RESERVED'}</span>
               </div>
-              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
+              <div style={{ fontSize: '.9rem', color: '#333', marginTop: '.35rem', lineHeight: 1.5 }}>
+                <div><strong>Passenger:</strong> {r.passengerName}</div>
+                <div><strong>Bus:</strong> {r.busNumber || '—'}</div>
+                <div><strong>Seat:</strong> {r.seatNumber}</div>
+                <div><strong>Departure:</strong> {r.departureTime ? String(r.departureTime).replace('T',' ') : '—'}</div>
                 <div><strong>Schedule:</strong> {r.scheduleId}</div>
-                <div><strong>Name:</strong> {r.passengerName}</div>
-                <div><strong>Email:</strong> {r.passengerEmail}</div>
-                {r.pickup && (
-                  <div><strong>Pickup Stop:</strong> {r.pickup}</div>
-                )}
-                {r.drop && (
-                  <div><strong>Drop Stop:</strong> {r.drop}</div>
-                )}
+                {r.pickup && (<div><strong>Pickup:</strong> {r.pickup}</div>)}
+                {r.drop && (<div><strong>Drop:</strong> {r.drop}</div>)}
                 {r.bookingTime && (
-                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
-                    Booked at: {String(r.bookingTime).replace('T', ' ')}
+                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '.25rem' }}>Booked: {String(r.bookingTime).replace('T', ' ')}</div>
+                )}
+                {r.status === 'RESERVED' && (
+                  <div style={{ marginTop: '.5rem' }}>
+                    <button onClick={async () => {
+                      if (!window.confirm('Are you sure you want to cancel this reservation?')) return;
+                      try {
+                        const resp = await fetch(`/api/reservations/${r.id}`, { method: 'DELETE' });
+                        if (!resp.ok) {
+                          const msg = await resp.text();
+                          throw new Error(msg || 'Cancel failed');
+                        }
+                        const myResp = await fetch('/api/reservations/my');
+                        const data = await myResp.json();
+                        setMine(Array.isArray(data) ? data : (data?.content ?? []));
+                        const hResp = await fetch('/api/reservations/history');
+                        const hData = await hResp.json();
+                        setHistory(Array.isArray(hData) ? hData : (hData?.content ?? []));
+                        // Notify seat availability components if listening
+                        window.dispatchEvent(new CustomEvent('seat-availability-updated'));
+                      } catch (e) {
+                        alert(e?.message || 'Failed to cancel');
+                      }
+                    }} style={{ background: '#e53935', color: '#fff' }}>Cancel Reservation</button>
                   </div>
                 )}
               </div>
             </div>
-          ))}
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: '#666' }}>No Reservations</p>
+          )}
         </div>
-      ) : (
-        <p>No Reservations</p>
+        <aside>
+          <h3>Reservation History</h3>
+          {history && history.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '.75rem' }}>
+              {history.map((h) => (
+                <div key={h.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: '.75rem', background: '#fafafa' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <strong>{h.busNumber || '—'}</strong>
+                    <span style={{ fontSize: '.8rem', color: '#555' }}>Seat {h.seatNumber}</span>
+                  </div>
+                  <div style={{ fontSize: '.9rem', color: '#333', marginTop: '.25rem' }}>
+                    <div>Passenger: {h.passengerName}</div>
+                    <div>Departure: {h.departureTime ? String(h.departureTime).replace('T',' ') : '—'}</div>
+                    <div>Booked: {h.bookingTime ? String(h.bookingTime).replace('T',' ') : '—'}</div>
+                    <div>Cancelled: {h.cancelledAt ? String(h.cancelledAt).replace('T',' ') : '—'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: '#666' }}>No history</p>
+          )}
+        </aside>
+      </div>
+
+      {/* Bus Reservations (DRIVER only) */}
+      {role === 'DRIVER' && (
+        <>
+          <h3 style={{ marginTop: '1rem' }}>Bus Reservations</h3>
+          {driverBus ? (
+            busReservations && busReservations.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
+                {busReservations.map((r) => (
+                  <div
+                    key={r.id}
+                    style={{
+                      border: '1px solid #ddd',
+                      borderRadius: 8,
+                      padding: '0.75rem 1rem',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      background: '#fff',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <strong>Reservation #{r.id}</strong>
+                      <span style={{ fontSize: '.8rem', color: '#666' }}>
+                        Bus: {r.busNumber || r.bus?.busNumber || r.bus?.number || 'N/A'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
+                      <div><strong>Schedule:</strong> {r.scheduleId}</div>
+                      <div><strong>Name:</strong> {r.passengerName}</div>
+                      <div><strong>Email:</strong> {r.passengerEmail}</div>
+                      {r.bookingTime && (
+                        <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
+                          Booked at: {String(r.bookingTime).replace('T', ' ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p>No Bus Reservations for assigned bus {driverBus.busNumber || driverBus.number}</p>
+            )
+          ) : (
+            <p>Loading assigned bus...</p>
+          )}
+        </>
       )}
     </div>
   );
