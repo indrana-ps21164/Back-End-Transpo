@@ -1148,6 +1148,7 @@ function SchedulesPage() {
 function ReservationsPage() {
   const navigate = useNavigate();
   const [mine, setMine] = useState([]);
+  const [history, setHistory] = useState([]);
   const [busReservations, setBusReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1178,6 +1179,12 @@ function ReservationsPage() {
             const resp = await fetch('/api/reservations/my');
             const data = await resp.json();
             setMine(Array.isArray(data) ? data : (data?.content ?? []));
+          } catch {}
+          // Load my reservation history
+          try {
+            const hResp = await fetch('/api/reservations/history');
+            const hData = await hResp.json();
+            setHistory(Array.isArray(hData) ? hData : (hData?.content ?? []));
           } catch {}
         }
         // Load role and driver bus for Bus Reservations section
@@ -1280,11 +1287,13 @@ function ReservationsPage() {
         <button type="submit">Create</button>
       </form>
 
-      <h3>My Reservations</h3>
-      {mine && mine.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
-          {mine.map((r) => (
-            <div key={r.id} style={{ border: '1px solid #ddd', borderRadius: 10, padding: '0.9rem', background: '#fff' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', alignItems: 'start' }}>
+        <div>
+          <h3>My Reservations</h3>
+          {mine && mine.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
+              {mine.map((r) => (
+                <div key={r.id} style={{ border: '1px solid #ddd', borderRadius: 10, padding: '0.9rem', background: '#fff' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <strong>#{r.id}</strong>
                 <span style={{ fontSize: '.8rem', color: r.status === 'PAID' ? '#1e88e5' : '#e53935' }}>{r.status || 'RESERVED'}</span>
@@ -1313,6 +1322,11 @@ function ReservationsPage() {
                         const myResp = await fetch('/api/reservations/my');
                         const data = await myResp.json();
                         setMine(Array.isArray(data) ? data : (data?.content ?? []));
+                        const hResp = await fetch('/api/reservations/history');
+                        const hData = await hResp.json();
+                        setHistory(Array.isArray(hData) ? hData : (hData?.content ?? []));
+                        // Notify seat availability components if listening
+                        window.dispatchEvent(new CustomEvent('seat-availability-updated'));
                       } catch (e) {
                         alert(e?.message || 'Failed to cancel');
                       }
@@ -1321,11 +1335,36 @@ function ReservationsPage() {
                 )}
               </div>
             </div>
-          ))}
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: '#666' }}>No Reservations</p>
+          )}
         </div>
-      ) : (
-        <p style={{ color: '#666' }}>No Reservations</p>
-      )}
+        <aside>
+          <h3>Reservation History</h3>
+          {history && history.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '.75rem' }}>
+              {history.map((h) => (
+                <div key={h.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: '.75rem', background: '#fafafa' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <strong>{h.busNumber || '—'}</strong>
+                    <span style={{ fontSize: '.8rem', color: '#555' }}>Seat {h.seatNumber}</span>
+                  </div>
+                  <div style={{ fontSize: '.9rem', color: '#333', marginTop: '.25rem' }}>
+                    <div>Passenger: {h.passengerName}</div>
+                    <div>Departure: {h.departureTime ? String(h.departureTime).replace('T',' ') : '—'}</div>
+                    <div>Booked: {h.bookingTime ? String(h.bookingTime).replace('T',' ') : '—'}</div>
+                    <div>Cancelled: {h.cancelledAt ? String(h.cancelledAt).replace('T',' ') : '—'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: '#666' }}>No history</p>
+          )}
+        </aside>
+      </div>
 
       {/* Bus Reservations (DRIVER only) */}
       {role === 'DRIVER' && (

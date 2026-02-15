@@ -8,6 +8,8 @@ import com.Transpo.transpo.dto.SeatAvailabilityDTO;
 import com.Transpo.transpo.model.Reservation;
 import com.Transpo.transpo.model.Schedule;
 import com.Transpo.transpo.repository.ReservationRepository;
+import com.Transpo.transpo.repository.ReservationHistoryRepository;
+import com.Transpo.transpo.model.ReservationHistory;
 import com.Transpo.transpo.repository.ScheduleRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,6 +38,7 @@ public class ReservationService {
     private final DriverAssignmentRepository driverAssignmentRepo;
     private final SeatStateRepository seatStateRepo;
     private final ConductorAssignmentRepository conductorAssignmentRepo;
+    private final ReservationHistoryRepository reservationHistoryRepo;
 
     public ReservationService(ReservationRepository reservationRepo, 
                              ScheduleRepository scheduleRepo,
@@ -43,7 +46,8 @@ public class ReservationService {
                              BusStopRepository busStopRepo,
                              DriverAssignmentRepository driverAssignmentRepo,
                              SeatStateRepository seatStateRepo,
-                             ConductorAssignmentRepository conductorAssignmentRepo) {
+                             ConductorAssignmentRepository conductorAssignmentRepo,
+                             ReservationHistoryRepository reservationHistoryRepo) {
         this.reservationRepo = reservationRepo;
         this.scheduleRepo = scheduleRepo;
         this.ruleService = ruleService;
@@ -51,6 +55,7 @@ public class ReservationService {
         this.driverAssignmentRepo = driverAssignmentRepo;
         this.seatStateRepo = seatStateRepo;
         this.conductorAssignmentRepo = conductorAssignmentRepo;
+        this.reservationHistoryRepo = reservationHistoryRepo;
     }
 
     /**
@@ -188,11 +193,28 @@ public class ReservationService {
         // Business rules validation for cancellation
         ruleService.validateReservationRules(user, schedule, false);
 
-        // Update status and free the seat; do not delete record
-        r.setStatus("CANCELLED");
-        schedule.setAvailableSeats(schedule.getAvailableSeats() + 1);
-        scheduleRepo.save(schedule);
-        reservationRepo.save(r);
+    // Copy to history, delete original, free seat
+    ReservationHistory h = new ReservationHistory();
+    h.setBookingTime(r.getBookingTime());
+    h.setCreatedBy(r.getCreatedBy());
+    h.setDropStopId(r.getDropStop() != null ? r.getDropStop().getId() : null);
+    h.setPaid(r.isPaid());
+    h.setPassengerEmail(r.getPassengerEmail());
+    h.setPassengerName(r.getPassengerName());
+    h.setPaymentMethod(r.getPaymentMethod());
+    h.setPaymentReference(r.getPaymentReference());
+    h.setPickupStopId(r.getPickupStop() != null ? r.getPickupStop().getId() : null);
+    h.setScheduleId(r.getSchedule() != null ? r.getSchedule().getId() : null);
+    h.setSeatNumber(r.getSeatNumber());
+    h.setStatus("CANCELLED");
+    h.setUsername(r.getUsername());
+    h.setCancelledAt(java.time.LocalDateTime.now());
+    reservationHistoryRepo.save(h);
+
+    // Delete original reservation and free seat
+    reservationRepo.delete(r);
+    schedule.setAvailableSeats(schedule.getAvailableSeats() + 1);
+    scheduleRepo.save(schedule);
     }
 
     @Transactional
@@ -395,6 +417,33 @@ public class ReservationService {
 
     public List<Reservation> getAllReservations() {
         return reservationRepo.findAll();
+    }
+
+    public List<java.util.Map<String,Object>> getReservationHistoryForUser(String username) {
+        var items = reservationHistoryRepo.findByUsername(username);
+        java.util.List<java.util.Map<String,Object>> out = new java.util.ArrayList<>();
+        for (var h : items) {
+            java.util.Map<String,Object> m = new java.util.HashMap<>();
+            m.put("id", h.getId());
+            m.put("passengerName", h.getPassengerName());
+            m.put("passengerEmail", h.getPassengerEmail());
+            m.put("seatNumber", h.getSeatNumber());
+            m.put("bookingTime", h.getBookingTime());
+            m.put("cancelledAt", h.getCancelledAt());
+            m.put("scheduleId", h.getScheduleId());
+            // busNumber and departureTime require joins; fetch from schedule if available
+            try {
+                if (h.getScheduleId() != null) {
+                    var sched = scheduleRepo.findById(h.getScheduleId()).orElse(null);
+                    if (sched != null) {
+                        m.put("busNumber", sched.getBus() != null ? sched.getBus().getBusNumber() : null);
+                        m.put("departureTime", sched.getDepartureTime());
+                    }
+                }
+            } catch (Exception ignored) {}
+            out.add(m);
+        }
+        return out;
     }
 
     /**

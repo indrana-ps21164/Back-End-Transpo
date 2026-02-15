@@ -148,6 +148,18 @@ public class ReservationController {
     }
 
     /**
+     * Current user's reservation history
+     */
+    @GetMapping("/history")
+    public ResponseEntity<List<Map<String,Object>>> listHistory() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = (auth != null && auth.isAuthenticated()) ? auth.getName() : null;
+        if (username == null) return ResponseEntity.ok(java.util.List.of());
+        var list = reservationService.getReservationHistoryForUser(username);
+        return ResponseEntity.ok(list);
+    }
+
+    /**
      * Conductor-specific: list reservations for the bus assigned to the conductor.
      */
     @GetMapping("/conductor")
