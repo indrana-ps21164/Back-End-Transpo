@@ -21,7 +21,7 @@ public class ReservationMapper {
     d.setUsername(r.getUsername());
     d.setBusNumber(r.getSchedule() != null && r.getSchedule().getBus() != null ? r.getSchedule().getBus().getBusNumber() : null);
     d.setDepartureTime(r.getSchedule() != null ? r.getSchedule().getDepartureTime() : null);
-    d.setStatus(r.isPaid() ? "PAID" : "RESERVED");
+    d.setStatus(r.getStatus() != null ? r.getStatus() : (r.isPaid() ? "PAID" : "RESERVED"));
         return d;
     }
 }

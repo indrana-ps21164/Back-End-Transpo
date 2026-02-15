@@ -1300,6 +1300,25 @@ function ReservationsPage() {
                 {r.bookingTime && (
                   <div style={{ fontSize: '.8rem', color: '#777', marginTop: '.25rem' }}>Booked: {String(r.bookingTime).replace('T', ' ')}</div>
                 )}
+                {r.status === 'RESERVED' && (
+                  <div style={{ marginTop: '.5rem' }}>
+                    <button onClick={async () => {
+                      if (!window.confirm('Are you sure you want to cancel this reservation?')) return;
+                      try {
+                        const resp = await fetch(`/api/reservations/${r.id}`, { method: 'DELETE' });
+                        if (!resp.ok) {
+                          const msg = await resp.text();
+                          throw new Error(msg || 'Cancel failed');
+                        }
+                        const myResp = await fetch('/api/reservations/my');
+                        const data = await myResp.json();
+                        setMine(Array.isArray(data) ? data : (data?.content ?? []));
+                      } catch (e) {
+                        alert(e?.message || 'Failed to cancel');
+                      }
+                    }} style={{ background: '#e53935', color: '#fff' }}>Cancel Reservation</button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

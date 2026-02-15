@@ -91,15 +91,11 @@ public class ReservationService {
             throw new ConflictException("No seats available");
         }
 
-        // Check duplicate seat booking and duplicate booking by the same user
+        // Check duplicate seat booking only (allow multiple reservations by same user on same schedule)
         List<Reservation> existing = reservationRepo.findByScheduleId(scheduleId);
-        String currentUser = getCurrentUsername();
         for (Reservation r : existing) {
-            if (r.getSeatNumber() == seatNumber) {
+            if (r.getSeatNumber() == seatNumber && (r.getStatus() == null || r.getStatus().equalsIgnoreCase("RESERVED") || r.isPaid())) {
                 throw new ConflictException("Seat " + seatNumber + " already taken for this schedule");
-            }
-            if (r.getUsername() != null && r.getUsername().equals(currentUser)) {
-                throw new ConflictException("You have already booked a seat on this schedule");
             }
         }
 
@@ -147,6 +143,7 @@ public class ReservationService {
         res.setSeatNumber(seatNumber);
         res.setPickupStop(pickupStop);
         res.setDropStop(dropStop);
+    res.setStatus("RESERVED");
         // set username from logged-in user
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.isAuthenticated()) {
@@ -166,20 +163,36 @@ public class ReservationService {
     public void cancelReservation(Long reservationId) {
         Reservation r = reservationRepo.findById(reservationId)
                 .orElseThrow(() -> new NotFoundException("Reservation not found: " + reservationId));
-        
+
         Schedule schedule = r.getSchedule();
         if (schedule == null) {
             throw new BadRequestException("Reservation has no associated schedule");
         }
 
-        // Apply business rules for cancellation
-        ruleService.validateReservationRules(getCurrentUsername(), schedule, false);
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new BadRequestException("Authentication required");
+        }
+        String user = auth.getName();
+        boolean isAdmin = auth.getAuthorities().stream().anyMatch(a -> {
+            String role = a.getAuthority();
+            return role != null && role.contains("ADMIN");
+        });
+        if (!(isAdmin || (r.getCreatedBy() != null && r.getCreatedBy().equals(user)))) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Not allowed to cancel this reservation");
+        }
+        if (r.isPaid()) {
+            throw new BadRequestException("Cannot cancel a paid reservation");
+        }
 
-        // Increase availability
+        // Business rules validation for cancellation
+        ruleService.validateReservationRules(user, schedule, false);
+
+        // Update status and free the seat; do not delete record
+        r.setStatus("CANCELLED");
         schedule.setAvailableSeats(schedule.getAvailableSeats() + 1);
         scheduleRepo.save(schedule);
-        
-        reservationRepo.delete(r);
+        reservationRepo.save(r);
     }
 
     @Transactional
