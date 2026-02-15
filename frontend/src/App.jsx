@@ -1171,6 +1171,8 @@ function ReservationsPage() {
         setSuccess('');
         const me = localStorage.getItem('token');
         if (me) {
+          // Auto-fill passenger name from logged-in user
+          setPassengerName(prev => prev && prev.length > 0 ? prev : me);
           try { setMine(await getReservationsByUser(me)); } catch {}
         }
         // Load role and driver bus for Bus Reservations section

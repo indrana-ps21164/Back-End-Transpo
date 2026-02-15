@@ -28,7 +28,7 @@ public class ReservationController {
     public ResponseEntity<ReservationDTO> book(@RequestBody Map<String, Object> req) {
     // Role check performed inside service (Admin full; Conductor restricted to their bus; Passenger self only)
         Long scheduleId = Long.valueOf(String.valueOf(req.get("scheduleId")));
-        String name = String.valueOf(req.get("passengerName"));
+    String name = req.get("passengerName") != null ? String.valueOf(req.get("passengerName")) : null;
         String email = String.valueOf(req.get("passengerEmail"));
         int seatNumber = Integer.parseInt(String.valueOf(req.get("seatNumber")));
     Long pickupStopId = req.get("pickupStopId") != null ? 
@@ -38,6 +38,11 @@ public class ReservationController {
     // Optional name-based fields from frontend; backend will resolve if ids not provided
     // Frontend may send pickup/drop names; backend currently uses IDs. If names are passed, ignore for now.
 
+        // If name missing/blank, use authenticated username
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if ((name == null || name.isBlank()) && auth != null && auth.isAuthenticated()) {
+            name = auth.getName();
+        }
         Reservation r = reservationService.bookSeat(scheduleId, name, email, seatNumber, pickupStopId, dropStopId);
         return ResponseEntity.ok(ReservationMapper.toDto(r));
     }
