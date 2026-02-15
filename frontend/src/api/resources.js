@@ -85,6 +85,7 @@ export const changeDriverBus = (busId) => client.put('/api/driver/my-bus', { bus
 export const updateMyLocation = (lat, lng) => client.post('/api/driver/location', { lat, lng }).then(r => r.data);
 export const getMyLocation = () => client.get('/api/driver/location').then(r => r.data);
 export const getDriverBusReservations = () => client.get('/api/driver/reservations').then(r => r.data);
+export const getDriverPickups = (params) => client.get('/api/driver/pickups', { params }).then(r => r.data);
 
 // Seat availability (role-aware via backend filtering)
 export const getSeatAvailability = (busNumber, scheduleId) =>

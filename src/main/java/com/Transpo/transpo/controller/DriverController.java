@@ -93,6 +93,25 @@ public class DriverController {
         return ResponseEntity.ok(mapData);
     }
 
+    /**
+     * Driver-only: Pickup points for a selected bus/schedule.
+     * Returns markers with passenger name, seat number, and pickup stop info.
+     */
+    @GetMapping("/pickups")
+    public ResponseEntity<List<Map<String, Object>>> getPickupPoints(
+            @RequestParam(required = false) Long busId,
+            @RequestParam(required = false) String busNumber,
+            @RequestParam Long scheduleId,
+            Authentication auth
+    ) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(401).body(java.util.List.of());
+        }
+        // Delegate to service which enforces driver assignment
+        List<Map<String, Object>> points = driverService.getPickupPointsForDriver(busId, busNumber, scheduleId, auth.getName());
+        return ResponseEntity.ok(points);
+    }
+
     // Driver: reservations for the assigned bus
     @GetMapping("/reservations")
     public ResponseEntity<List<Map<String, Object>>> getAssignedBusReservations() {

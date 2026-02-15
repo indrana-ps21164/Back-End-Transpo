@@ -456,6 +456,9 @@ function DriverDashboard() {
   {/* Removed Change Assigned Bus ID section per request */}
       {msg && <p>{msg}</p>}
       <LiveMap lat={lat} lng={lng} />
+      <div style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
+        <DriverPickupMap />
+      </div>
     </div>
   );
 }
@@ -488,6 +491,114 @@ function LiveMap({ lat, lng }) {
     })();
   }, [mapEl, lat, lng]);
   return <div ref={setMapEl} style={{ height: 400, border: '1px solid #ddd' }} />;
+}
+// Driver: Pickup points map with bus + schedule selection
+import { getSeatAvailability } from './api/resources';
+function DriverPickupMap() {
+  const [me, setMe] = useState(null);
+  const [busOptions, setBusOptions] = useState([]);
+  const [busNumber, setBusNumber] = useState('');
+  const [times, setTimes] = useState([]);
+  const [scheduleId, setScheduleId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [markers, setMarkers] = useState([]);
+  const [mapEl, setMapEl] = useState(null);
+
+  useEffect(() => { (async () => { try { const m = await whoami(); setMe(m); } catch {} })(); }, []);
+  // Load assigned bus only for driver
+  useEffect(() => { (async () => {
+    try {
+      const b = await fetch('/api/driver/my-bus');
+      const data = await b.json();
+      const bn = data?.busNumber || data?.number;
+      const id = data?.id || data?.bus?.id;
+      const opts = bn ? [{ id, busNumber: bn }] : [];
+      setBusOptions(opts);
+      setBusNumber(bn || '');
+    } catch (e) { setError('Failed to load assigned bus'); }
+  })(); }, []);
+
+  // Load times for selected bus
+  useEffect(() => { (async () => {
+    setTimes([]); setScheduleId('');
+    if (!busNumber) return;
+    try {
+      const res = await fetch(`/api/schedules?busNumber=${encodeURIComponent(busNumber)}`);
+      const data = await res.json();
+      setTimes(Array.isArray(data) ? data : []);
+    } catch (e) { setError('Failed to load schedules'); }
+  })(); }, [busNumber]);
+
+  // Fetch pickup markers when schedule changes
+  useEffect(() => { (async () => {
+    if (!scheduleId || !busNumber) { setMarkers([]); return; }
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(`/api/driver/pickups?scheduleId=${scheduleId}&busNumber=${encodeURIComponent(busNumber)}`);
+      const data = await res.json();
+      setMarkers(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to load pickup points');
+      setMarkers([]);
+    } finally { setLoading(false); }
+  })(); }, [scheduleId, busNumber]);
+
+  // Render Leaflet map
+  useEffect(() => { (async () => {
+    if (!mapEl) return;
+    const id = 'leaflet-css';
+    if (!document.getElementById(id)) {
+      const link = document.createElement('link');
+      link.id = id; link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    const Lmod = await import('leaflet');
+    const L = Lmod.default || Lmod;
+    const map = L.map(mapEl, { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    const bounds = [];
+    (markers || []).forEach(m => {
+      if (m.lat != null && m.lng != null) {
+        const latlng = [m.lat, m.lng];
+        bounds.push(latlng);
+        const mk = L.marker(latlng).addTo(map);
+        const name = m.passengerName || 'Passenger';
+        const seat = m.seatNumber != null ? `Seat ${m.seatNumber}` : '';
+        const stop = m.pickupName || 'Pickup';
+        mk.bindPopup(`<b>${name}</b><br/>${seat}<br/>${stop}`);
+      }
+    });
+    if (bounds.length > 0) {
+      map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20] });
+    } else {
+      map.setView([6.9271, 79.8612], 11);
+    }
+  })(); }, [mapEl, markers]);
+
+  if (me && me.role !== 'DRIVER') return null;
+
+  return (
+    <div>
+      <h3>Pickup Points Map</h3>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <select value={busNumber} onChange={e => setBusNumber(e.target.value)} disabled={!busOptions.length}>
+          <option value="">{!busOptions.length ? 'No assigned bus' : 'Select Bus Number'}</option>
+          {busOptions.map(b => (<option key={b.id} value={b.busNumber}>{b.busNumber}</option>))}
+        </select>
+        <select value={scheduleId} onChange={e => setScheduleId(e.target.value)} disabled={!busNumber || !times.length}>
+          <option value="">{!busNumber ? 'Select bus first' : (!times.length ? 'No departure times' : 'Select Departure Time')}</option>
+          {times.map(t => (<option key={t.id} value={t.id}>{String(t.departureTime).replace('T',' ')}</option>))}
+        </select>
+      </div>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {!loading && markers.length === 0 && scheduleId && (
+        <p style={{ color: '#666' }}>No reservations found or no pickup points available.</p>
+      )}
+      <div ref={setMapEl} style={{ height: 420, border: '1px solid #ddd', borderRadius: 8 }} />
+    </div>
+  );
 }
 // Passenger dashboard components moved to components/PassengerDashboard.jsx to avoid scope collisions
 // (Old DashboardMap removed to avoid duplicate identifiers)
