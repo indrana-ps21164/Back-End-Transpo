@@ -14,6 +14,9 @@ public class ReservationDTO {
     private String pickup;      // stop name for UI
     private String drop;        // stop name for UI
     private String username; // logged-in username of passenger
+    private String busNumber;
+    private java.time.LocalDateTime departureTime;
+    private String status; // RESERVED/PAID/DISABLED
 
 
     public ReservationDTO() {}
@@ -57,5 +60,14 @@ public class ReservationDTO {
     public void setUsername(String username) {
         this.username = username;
     }
+
+    public String getBusNumber() { return busNumber; }
+    public void setBusNumber(String busNumber) { this.busNumber = busNumber; }
+
+    public java.time.LocalDateTime getDepartureTime() { return departureTime; }
+    public void setDepartureTime(java.time.LocalDateTime departureTime) { this.departureTime = departureTime; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
 }

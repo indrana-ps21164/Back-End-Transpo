@@ -131,6 +131,23 @@ public class ReservationController {
     }
 
     /**
+     * Current user's created reservations (by createdBy)
+     */
+    @GetMapping("/my")
+    public ResponseEntity<List<ReservationDTO>> listMyCreated() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = (auth != null && auth.isAuthenticated()) ? auth.getName() : null;
+        if (username == null) {
+            return ResponseEntity.ok(java.util.List.of());
+        }
+        List<ReservationDTO> list = reservationService.getReservationsCreatedBy(username)
+                .stream()
+                .map(ReservationMapper::toDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(list);
+    }
+
+    /**
      * Conductor-specific: list reservations for the bus assigned to the conductor.
      */
     @GetMapping("/conductor")

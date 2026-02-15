@@ -151,6 +151,8 @@ public class ReservationService {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.isAuthenticated()) {
             res.setUsername(auth.getName());
+            // also set creator username
+            res.setCreatedBy(auth.getName());
         }
 
         return reservationRepo.save(res);
@@ -368,6 +370,14 @@ public class ReservationService {
         }
         String username = auth.getName();
         return reservationRepo.findByUsername(username);
+    }
+
+    /**
+     * Get reservations created by the current user (createdBy filter)
+     */
+    public List<Reservation> getReservationsCreatedBy(String username) {
+        if (username == null || username.isBlank()) return java.util.List.of();
+        return reservationRepo.findByCreatedBy(username);
     }
 
     public List<Reservation> getAllReservations() {

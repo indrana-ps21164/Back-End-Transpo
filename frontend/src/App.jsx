@@ -1173,7 +1173,12 @@ function ReservationsPage() {
         if (me) {
           // Auto-fill passenger name from logged-in user
           setPassengerName(prev => prev && prev.length > 0 ? prev : me);
-          try { setMine(await getReservationsByUser(me)); } catch {}
+          // Load my reservations via backend filter
+          try {
+            const resp = await fetch('/api/reservations/my');
+            const data = await resp.json();
+            setMine(Array.isArray(data) ? data : (data?.content ?? []));
+          } catch {}
         }
         // Load role and driver bus for Bus Reservations section
         const currentRole = getStoredRole();
@@ -1226,8 +1231,11 @@ function ReservationsPage() {
         drop: dropStop,
         status: 'BOOKED',
       });
-      const me = localStorage.getItem('token');
-      if (me) { try { setMine(await getReservationsByUser(me)); } catch {} }
+      try {
+        const resp = await fetch('/api/reservations/my');
+        const data = await resp.json();
+        setMine(Array.isArray(data) ? data : (data?.content ?? []));
+      } catch {}
       setSuccess('Reservation successful. Seat booked.');
       // Clear only payment inputs; keep schedule/pickup/drop visible
       setPaymentNumber(''); setSecurityKey('');
@@ -1274,45 +1282,30 @@ function ReservationsPage() {
 
       <h3>My Reservations</h3>
       {mine && mine.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '1rem', marginTop: '0.5rem' }}>
           {mine.map((r) => (
-            <div
-              key={r.id}
-              style={{
-                border: '1px solid #ddd',
-                borderRadius: 8,
-                padding: '0.75rem 1rem',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                background: '#fafafa',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                <strong>Reservation #{r.id}</strong>
-                <span style={{ fontSize: '.8rem', color: '#666' }}>
-                  Seat {r.seatNumber}
-                </span>
+            <div key={r.id} style={{ border: '1px solid #ddd', borderRadius: 10, padding: '0.9rem', background: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong>#{r.id}</strong>
+                <span style={{ fontSize: '.8rem', color: r.status === 'PAID' ? '#1e88e5' : '#e53935' }}>{r.status || 'RESERVED'}</span>
               </div>
-              <div style={{ fontSize: '.9rem', color: '#444', lineHeight: 1.4 }}>
+              <div style={{ fontSize: '.9rem', color: '#333', marginTop: '.35rem', lineHeight: 1.5 }}>
+                <div><strong>Passenger:</strong> {r.passengerName}</div>
+                <div><strong>Bus:</strong> {r.busNumber || '—'}</div>
+                <div><strong>Seat:</strong> {r.seatNumber}</div>
+                <div><strong>Departure:</strong> {r.departureTime ? String(r.departureTime).replace('T',' ') : '—'}</div>
                 <div><strong>Schedule:</strong> {r.scheduleId}</div>
-                <div><strong>Name:</strong> {r.passengerName}</div>
-                <div><strong>Email:</strong> {r.passengerEmail}</div>
-                {r.pickup && (
-                  <div><strong>Pickup Stop:</strong> {r.pickup}</div>
-                )}
-                {r.drop && (
-                  <div><strong>Drop Stop:</strong> {r.drop}</div>
-                )}
+                {r.pickup && (<div><strong>Pickup:</strong> {r.pickup}</div>)}
+                {r.drop && (<div><strong>Drop:</strong> {r.drop}</div>)}
                 {r.bookingTime && (
-                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '0.25rem' }}>
-                    Booked at: {String(r.bookingTime).replace('T', ' ')}
-                  </div>
+                  <div style={{ fontSize: '.8rem', color: '#777', marginTop: '.25rem' }}>Booked: {String(r.bookingTime).replace('T', ' ')}</div>
                 )}
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <p>No Reservations</p>
+        <p style={{ color: '#666' }}>No Reservations</p>
       )}
 
       {/* Bus Reservations (DRIVER only) */}
