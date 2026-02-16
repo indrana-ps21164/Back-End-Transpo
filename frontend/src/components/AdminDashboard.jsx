@@ -22,11 +22,13 @@ export default function AdminDashboard() {
         <button onClick={() => setActive('route')}>Route</button>
         <button onClick={() => setActive('schedule')}>Schedule</button>
         <button onClick={() => setActive('assignments')}>Assignments</button>
+        <button onClick={() => setActive('ticket-prices')}>Ticket Prices</button>
       </div>
       {active === 'bus' && <BusManager />}
       {active === 'route' && <RouteManager />}
       {active === 'schedule' && <ScheduleManager />}
       {active === 'assignments' && <AssignmentManager />}
+      {active === 'ticket-prices' && <TicketPricesManager />}
     </div>
   );
 }
@@ -334,6 +336,119 @@ function RouteManager() {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function TicketPricesManager() {
+  const [routeId, setRouteId] = useState('');
+  const [fromStopId, setFromStopId] = useState('');
+  const [toStopId, setToStopId] = useState('');
+  const [price, setPrice] = useState('');
+  const [items, setItems] = useState([]);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  useEffect(() => { (async () => {
+    setItems([]);
+    if (!routeId) return;
+    try {
+      const tRes = await fetch(`/api/ticket-prices/route/${routeId}`);
+      const tData = await tRes.json();
+      setItems(Array.isArray(tData) ? tData : (tData?.content ?? []));
+    } catch {}
+  })(); }, [routeId]);
+
+  async function save() {
+    setMsg(''); setErr('');
+    if (!routeId || !fromStopId || !toStopId || !price) { setErr('All fields are required'); return; }
+    if (String(fromStopId) === String(toStopId)) { setErr('From and To must differ'); return; }
+    try {
+      const res = await fetch('/api/ticket-prices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ routeId: Number(routeId), fromStopId: Number(fromStopId), toStopId: Number(toStopId), price: Number(price) })
+      });
+  let data = null;
+  try { data = await res.json(); } catch { /* empty body */ }
+  if (!res.ok || (data && data.error)) throw new Error((data && data.error) || `Failed to save (${res.status})`);
+      setMsg('Saved');
+      const tRes = await fetch(`/api/ticket-prices/route/${routeId}`);
+  let tData = null; try { tData = await tRes.json(); } catch { tData = []; }
+      setItems(Array.isArray(tData) ? tData : (tData?.content ?? []));
+      setFromStopId(''); setToStopId(''); setPrice('');
+    } catch (e) { setErr(e.message); }
+  }
+
+  return (
+    <div>
+      <h2>Ticket Prices</h2>
+      {msg && <p style={{ color: 'green' }}>{msg}</p>}
+      {err && <p style={{ color: 'red' }}>{err}</p>}
+      <div className="form" style={{ gap: '.5rem', marginBottom: '.75rem', flexWrap: 'wrap' }}>
+        <input type="number" placeholder="Route ID" value={routeId} onChange={e => setRouteId(e.target.value)} />
+        <input type="number" placeholder="From Stop ID" value={fromStopId} onChange={e => setFromStopId(e.target.value)} />
+        <input type="number" placeholder="To Stop ID" value={toStopId} onChange={e => setToStopId(e.target.value)} />
+        <input type="number" placeholder="Ticket Price" value={price} onChange={e => setPrice(e.target.value)} />
+        <button onClick={save}>Save</button>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Route ID</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>From Stop ID</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>To Stop ID</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Price</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Edit</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Delete</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(items || []).map(tp => (
+              <tr key={tp.id}>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>{tp.route?.id || tp.routeId}</td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>{tp.fromStopId}</td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>{tp.toStopId}</td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>
+                  <input type="number" value={tp.price} onChange={e => {
+                    const val = e.target.value;
+                    setItems(prev => prev.map(x => x.id === tp.id ? { ...x, price: val } : x));
+                  }} />
+                </td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>
+                  <button onClick={() => { setRouteId(String(tp.route?.id || tp.routeId)); setFromStopId(String(tp.fromStopId)); setToStopId(String(tp.toStopId)); setPrice(String(tp.price)); }}>Edit</button>
+          <button style={{ marginLeft: 6 }} onClick={async () => {
+                    try {
+            const res = await fetch(`/api/ticket-prices/${tp.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ price: Number(tp.price) }) });
+            let data = null; try { data = await res.json(); } catch { /* empty body */ }
+            if (!res.ok || (data && data.error)) throw new Error((data && data.error) || `Update failed (${res.status})`);
+                      setMsg('Updated');
+                    } catch (e) { setErr(e.message); }
+                  }}>Save</button>
+                </td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>
+                  <button style={{ color: 'white', background: '#b21f2d', border: 'none', padding: '.25rem .5rem', cursor: 'pointer' }} onClick={async () => {
+                    setErr(''); setMsg('');
+                    try {
+                      const res = await fetch(`/api/ticket-prices/${tp.id}`, { method: 'DELETE' });
+                      if (!res.ok && res.status !== 204) throw new Error(`Delete failed (${res.status})`);
+                      // refresh list
+                      if (routeId) {
+                        const tRes = await fetch(`/api/ticket-prices/route/${routeId}`);
+                        let tData = null; try { tData = await tRes.json(); } catch { tData = []; }
+                        setItems(Array.isArray(tData) ? tData : (tData?.content ?? []));
+                      } else {
+                        setItems(prev => prev.filter(x => x.id !== tp.id));
+                      }
+                      setMsg('Deleted');
+                    } catch (e) { setErr(e.message); }
+                  }}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

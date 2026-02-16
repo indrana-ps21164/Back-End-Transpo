@@ -17,4 +17,7 @@ public interface BusStopRepository extends JpaRepository<BusStop, Long> {
            "(SELECT s.route.id FROM Schedule s WHERE s.bus.id = :busId) " +
            "ORDER BY bs.route.id, bs.sequence ASC")
     List<BusStop> findStopsByBusId(@Param("busId") Long busId);
+
+    @Query("SELECT COUNT(bs) > 0 FROM BusStop bs WHERE bs.id = :stopId AND bs.route.id = :routeId")
+    boolean existsByIdAndRouteId(@Param("stopId") Long stopId, @Param("routeId") Long routeId);
 }

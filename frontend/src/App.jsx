@@ -3,6 +3,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { whoami } from './api/auth';
 import SeatAvailability from './components/SeatAvailability';
 import './App.css';
+import RatingSidebar from './components/RatingSidebar';
 // Role-based menu config and helpers
 const MENU_CONFIG = {
   DRIVER: [
@@ -155,7 +156,7 @@ const Layout = ({ children }) => {
   const menus = role && MENU_CONFIG[role] ? MENU_CONFIG[role] : [];
   const onLogout = () => { localStorage.removeItem('token'); clearStoredRole(); window.location.href = '/login'; };
   return (
-    <div className="container">
+    <div className="container" style={{ display: 'grid', gridTemplateColumns: '1fr minmax(280px, 340px)', gap: 0 }}>
       <nav className="nav">
         {authed ? (
           <>
@@ -222,7 +223,8 @@ const Layout = ({ children }) => {
           </>
         )}
       </nav>
-      <main>{children}</main>
+  <main style={{ minWidth: 0 }}>{children}</main>
+  <RatingSidebar />
       {editOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}>
           <div style={{ background: '#fff', borderRadius: 10, width: 'min(560px, 92vw)', padding: '1rem', boxShadow: '0 10px 24px rgba(0,0,0,0.2)' }}>
