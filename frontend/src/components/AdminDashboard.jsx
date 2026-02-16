@@ -401,6 +401,7 @@ function TicketPricesManager() {
               <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>To Stop ID</th>
               <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Price</th>
               <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Edit</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Delete</th>
             </tr>
           </thead>
           <tbody>
@@ -425,6 +426,24 @@ function TicketPricesManager() {
                       setMsg('Updated');
                     } catch (e) { setErr(e.message); }
                   }}>Save</button>
+                </td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>
+                  <button style={{ color: 'white', background: '#b21f2d', border: 'none', padding: '.25rem .5rem', cursor: 'pointer' }} onClick={async () => {
+                    setErr(''); setMsg('');
+                    try {
+                      const res = await fetch(`/api/ticket-prices/${tp.id}`, { method: 'DELETE' });
+                      if (!res.ok && res.status !== 204) throw new Error(`Delete failed (${res.status})`);
+                      // refresh list
+                      if (routeId) {
+                        const tRes = await fetch(`/api/ticket-prices/route/${routeId}`);
+                        let tData = null; try { tData = await tRes.json(); } catch { tData = []; }
+                        setItems(Array.isArray(tData) ? tData : (tData?.content ?? []));
+                      } else {
+                        setItems(prev => prev.filter(x => x.id !== tp.id));
+                      }
+                      setMsg('Deleted');
+                    } catch (e) { setErr(e.message); }
+                  }}>Delete</button>
                 </td>
               </tr>
             ))}

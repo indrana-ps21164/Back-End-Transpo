@@ -3,6 +3,7 @@ package com.Transpo.transpo.controller;
 import com.Transpo.transpo.dto.TicketPriceDTO;
 import com.Transpo.transpo.model.TicketPrice;
 import com.Transpo.transpo.service.TicketPriceService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -54,5 +55,15 @@ public class TicketPriceController {
     private TicketPriceDTO toDto(TicketPrice tp) {
         Long routeId = tp.getRoute() != null ? tp.getRoute().getId() : null;
         return new TicketPriceDTO(tp.getId(), routeId, tp.getFromStopId(), tp.getToStopId(), tp.getPrice());
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(@PathVariable Long id) {
+        try {
+            service.delete(id);
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 }

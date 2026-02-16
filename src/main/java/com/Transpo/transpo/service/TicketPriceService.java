@@ -65,4 +65,11 @@ public class TicketPriceService {
     }
 
     // If Route exposes a stop list, add membership validation here.
+
+    @Transactional
+    public void delete(Long id) {
+        TicketPrice tp = ticketPriceRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Ticket price not found"));
+        ticketPriceRepository.delete(tp);
+    }
 }
