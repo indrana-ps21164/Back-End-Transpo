@@ -85,7 +85,10 @@ public class SecurityConfig {
                     "/api/buses/**",
                     "/api/routes/**",
                     "/api/schedules/**",
+                    "/api/ratings",
                     "/api/reservations/by-email").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/ratings/me").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/ratings").permitAll()
                 
                 // Reservation endpoints
                 .requestMatchers(HttpMethod.POST, "/api/reservations/**")
