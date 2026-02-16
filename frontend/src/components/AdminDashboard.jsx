@@ -342,9 +342,7 @@ function RouteManager() {
 }
 
 function TicketPricesManager() {
-  const [routes, setRoutes] = useState([]);
   const [routeId, setRouteId] = useState('');
-  const [stops, setStops] = useState([]);
   const [fromStopId, setFromStopId] = useState('');
   const [toStopId, setToStopId] = useState('');
   const [price, setPrice] = useState('');
@@ -352,19 +350,10 @@ function TicketPricesManager() {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
-  useEffect(() => { (async () => { try {
-    const res = await fetch('/api/routes');
-    const data = await res.json();
-    setRoutes(Array.isArray(data) ? data : (data?.content ?? []));
-  } catch {} })(); }, []);
-
   useEffect(() => { (async () => {
-    setStops([]); setItems([]); setFromStopId(''); setToStopId('');
+    setItems([]);
     if (!routeId) return;
     try {
-      const sRes = await fetch(`/api/routes/${routeId}/stops`);
-      const sData = await sRes.json();
-      setStops(Array.isArray(sData) ? sData : (sData?.content ?? []));
       const tRes = await fetch(`/api/ticket-prices/route/${routeId}`);
       const tData = await tRes.json();
       setItems(Array.isArray(tData) ? tData : (tData?.content ?? []));
@@ -380,11 +369,12 @@ function TicketPricesManager() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ routeId: Number(routeId), fromStopId: Number(fromStopId), toStopId: Number(toStopId), price: Number(price) })
       });
-      const data = await res.json();
-      if (!res.ok || data?.error) throw new Error(data?.error || 'Failed to save');
+  let data = null;
+  try { data = await res.json(); } catch { /* empty body */ }
+  if (!res.ok || (data && data.error)) throw new Error((data && data.error) || `Failed to save (${res.status})`);
       setMsg('Saved');
       const tRes = await fetch(`/api/ticket-prices/route/${routeId}`);
-      const tData = await tRes.json();
+  let tData = null; try { tData = await tRes.json(); } catch { tData = []; }
       setItems(Array.isArray(tData) ? tData : (tData?.content ?? []));
       setFromStopId(''); setToStopId(''); setPrice('');
     } catch (e) { setErr(e.message); }
@@ -396,28 +386,19 @@ function TicketPricesManager() {
       {msg && <p style={{ color: 'green' }}>{msg}</p>}
       {err && <p style={{ color: 'red' }}>{err}</p>}
       <div className="form" style={{ gap: '.5rem', marginBottom: '.75rem', flexWrap: 'wrap' }}>
-        <select value={routeId} onChange={e => setRouteId(e.target.value)}>
-          <option value="">Select Route</option>
-          {routes.map(r => (<option key={r.id} value={r.id}>{r.name || `${r.origin} → ${r.destination}`}</option>))}
-        </select>
-        <select value={fromStopId} onChange={e => setFromStopId(e.target.value)} disabled={!routeId || stops.length === 0}>
-          <option value="">From Stop</option>
-          {stops.map(s => (<option key={s.id} value={s.id}>{s.name || s.stopName || s.id}</option>))}
-        </select>
-        <select value={toStopId} onChange={e => setToStopId(e.target.value)} disabled={!routeId || stops.length === 0}>
-          <option value="">To Stop</option>
-          {stops.map(s => (<option key={s.id} value={s.id}>{s.name || s.stopName || s.id}</option>))}
-        </select>
-        <input placeholder="Price" type="number" value={price} onChange={e => setPrice(e.target.value)} />
+        <input type="number" placeholder="Route ID" value={routeId} onChange={e => setRouteId(e.target.value)} />
+        <input type="number" placeholder="From Stop ID" value={fromStopId} onChange={e => setFromStopId(e.target.value)} />
+        <input type="number" placeholder="To Stop ID" value={toStopId} onChange={e => setToStopId(e.target.value)} />
+        <input type="number" placeholder="Ticket Price" value={price} onChange={e => setPrice(e.target.value)} />
         <button onClick={save}>Save</button>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Route</th>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>From Stop</th>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>To Stop</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Route ID</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>From Stop ID</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>To Stop ID</th>
               <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Price</th>
               <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '.5rem' }}>Edit</th>
             </tr>
@@ -425,9 +406,9 @@ function TicketPricesManager() {
           <tbody>
             {(items || []).map(tp => (
               <tr key={tp.id}>
-                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>{tp.route?.name || `${tp.route?.origin || ''} → ${tp.route?.destination || ''}`}</td>
-                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>{tp.fromStop?.name || tp.fromStop?.stopName || tp.fromStopId}</td>
-                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>{tp.toStop?.name || tp.toStop?.stopName || tp.toStopId}</td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>{tp.route?.id || tp.routeId}</td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>{tp.fromStopId}</td>
+                <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>{tp.toStopId}</td>
                 <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>
                   <input type="number" value={tp.price} onChange={e => {
                     const val = e.target.value;
@@ -435,11 +416,12 @@ function TicketPricesManager() {
                   }} />
                 </td>
                 <td style={{ borderBottom: '1px solid #eee', padding: '.5rem' }}>
-                  <button onClick={async () => {
+                  <button onClick={() => { setRouteId(String(tp.route?.id || tp.routeId)); setFromStopId(String(tp.fromStopId)); setToStopId(String(tp.toStopId)); setPrice(String(tp.price)); }}>Edit</button>
+          <button style={{ marginLeft: 6 }} onClick={async () => {
                     try {
-                      const res = await fetch(`/api/ticket-prices/${tp.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ price: Number(tp.price) }) });
-                      const data = await res.json();
-                      if (!res.ok || data?.error) throw new Error(data?.error || 'Update failed');
+            const res = await fetch(`/api/ticket-prices/${tp.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ price: Number(tp.price) }) });
+            let data = null; try { data = await res.json(); } catch { /* empty body */ }
+            if (!res.ok || (data && data.error)) throw new Error((data && data.error) || `Update failed (${res.status})`);
                       setMsg('Updated');
                     } catch (e) { setErr(e.message); }
                   }}>Save</button>
